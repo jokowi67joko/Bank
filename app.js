@@ -30,7 +30,19 @@ import {
   getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
+// =====================================================
+// PROTEKSI KLIK KANAN / LONG PRESS POPUP (ANTI-COPY)
+// =====================================================
+document.addEventListener('contextmenu', event => {
+  // Hanya blokir jika bukan elemen input/textarea
+  if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'TEXTAREA') {
+    event.preventDefault();
+  }
+});
+
+// =====================================================
 // STATE GLOBAL APLIKASI
+// =====================================================
 let currentUser = null;
 let currentUserData = null;
 let isAdmin = false;
@@ -39,6 +51,8 @@ let kasSettings = {
   balance: 0,
   feeAmount: 2000,
   scheduleMode: "weekly", // "weekly" | "daily"
+  startDate: new Date().toISOString().split("T")[0],
+  classLogoURL: "",
   feeHistory: []
 };
 
@@ -48,6 +62,7 @@ let paymentsCache = {};
 let usersDirectoryCache = {};
 let selectedLogIds = new Set();
 let pendingPhotoFile = null;
+let pendingClassLogo = null;
 
 // SVG BADGES
 const ADMIN_BADGE_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="#1d4ed8" style="vertical-align:middle"><path d="M12 2l2.4 2.4 3.4-.4.8 3.3 3.1 1.5-1.1 3.2 1.1 3.2-3.1 1.5-.8 3.3-3.4-.4L12 22l-2.4-2.4-3.4.4-.8-3.3-3.1-1.5 1.1-3.2-1.1-3.2 3.1-1.5.8-3.3 3.4.4L12 2zm-1.1 13.4l6-6-1.4-1.4-4.6 4.6-2.2-2.2-1.4 1.4 3.6 3.6z"/></svg>`;
@@ -161,15 +176,15 @@ function openConfirmModal(title, message, onConfirm) {
   document.getElementById("confirm-title").textContent = title;
   document.getElementById("confirm-message").textContent = message;
   confirmCallback = onConfirm;
-  confirmModal.classList.remove("hidden");
+  if(confirmModal) confirmModal.classList.remove("hidden");
 }
 
-document.getElementById("confirm-cancel-btn").addEventListener("click", () => {
+document.getElementById("confirm-cancel-btn")?.addEventListener("click", () => {
   confirmModal.classList.add("hidden");
   confirmCallback = null;
 });
 
-document.getElementById("confirm-ok-btn").addEventListener("click", async () => {
+document.getElementById("confirm-ok-btn")?.addEventListener("click", async () => {
   confirmModal.classList.add("hidden");
   if (typeof confirmCallback === "function") {
     await confirmCallback();
@@ -178,45 +193,49 @@ document.getElementById("confirm-ok-btn").addEventListener("click", async () => 
 });
 
 // =====================================================
-// 3. SISTEM PERIODE (MINGGUAN 6 HARI vs HARIAN SENIN-SABTU)
+// 3. SISTEM PERIODE (BERDASARKAN TANGGAL MULAI IURAN)
 // =====================================================
-function getActiveSchoolDate(offsetDays = 0) {
-  const now = new Date();
-  // Jika hari ini Minggu (0), geser ke Sabtu kemarin
-  if (now.getDay() === 0) {
-    now.setDate(now.getDate() - 1);
-  }
-  // Geser berdasarkan offset hari sekolah (lompati hari Minggu)
-  let steps = offsetDays;
-  const dir = steps >= 0 ? 1 : -1;
-  steps = Math.abs(steps);
-  while (steps > 0) {
-    now.setDate(now.getDate() + dir);
-    if (now.getDay() !== 0) {
-      steps--;
-    }
-  }
-  return now;
+function getBaseStartDate() {
+  if (kasSettings.startDate) return new Date(kasSettings.startDate);
+  return new Date();
 }
 
 function getActivePeriodInfo() {
+  const baseDate = getBaseStartDate();
+
   if (kasSettings.scheduleMode === "daily") {
-    const d = getActiveSchoolDate(periodOffset);
+    let d = new Date(baseDate);
+    // Jika start date jatuh di hari Minggu, geser mulai ke Senin
+    if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+
+    // Lakukan offset hari dari start date
+    let steps = periodOffset;
+    const dir = steps >= 0 ? 1 : -1;
+    steps = Math.abs(steps);
+    while (steps > 0) {
+      d.setDate(d.getDate() + dir);
+      if (d.getDay() !== 0) steps--; // Skip hari Minggu
+    }
+
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
     const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    
     return {
       key: `DAILY_${yyyy}-${mm}-${dd}`,
       label: `${dayNames[d.getDay()]}, ${dd}/${mm}/${yyyy}`
     };
+
   } else {
-    // Mode Mingguan (Senin - Sabtu dalam minggu tersebut)
-    const now = new Date();
-    const day = now.getDay();
+    // Mode Mingguan
+    const d = new Date(baseDate);
+    const day = d.getDay();
     const diffToMonday = day === 0 ? -6 : 1 - day;
-    const monday = new Date(now);
-    monday.setDate(now.getDate() + diffToMonday + periodOffset * 7);
+    
+    // Cari hari Senin dari minggu dimulainya iuran
+    const monday = new Date(d);
+    monday.setDate(d.getDate() + diffToMonday + (periodOffset * 7));
 
     const saturday = new Date(monday);
     saturday.setDate(monday.getDate() + 5);
@@ -224,7 +243,6 @@ function getActivePeriodInfo() {
     const yyyy = monday.getFullYear();
     const mm = String(monday.getMonth() + 1).padStart(2, "0");
     const dd = String(monday.getDate()).padStart(2, "0");
-
     const satDd = String(saturday.getDate()).padStart(2, "0");
     const satMm = String(saturday.getMonth() + 1).padStart(2, "0");
 
@@ -326,6 +344,8 @@ function startRealtimeListeners() {
         balance: 0,
         feeAmount: 2000,
         scheduleMode: "weekly",
+        startDate: new Date().toISOString().split("T")[0],
+        classLogoURL: "",
         feeHistory: [
           {
             amount: 2000,
@@ -344,6 +364,8 @@ function startRealtimeListeners() {
       balance: Number(data.balance || 0),
       feeAmount: Number(data.feeAmount || 2000),
       scheduleMode: data.scheduleMode || "weekly",
+      startDate: data.startDate || new Date().toISOString().split("T")[0],
+      classLogoURL: data.classLogoURL || "",
       feeHistory: Array.isArray(data.feeHistory) ? data.feeHistory : []
     };
 
@@ -352,8 +374,29 @@ function startRealtimeListeners() {
     document.getElementById("kas-schedule-info").textContent = `Iuran: ${formatRupiah(kasSettings.feeAmount)} / ${modeText}`;
 
     // Update form pengaturan di tab Atur Saldo
-    document.getElementById("fee-amount-input").value = kasSettings.feeAmount;
+    const startInput = document.getElementById("start-date-input");
+    if(startInput) startInput.value = kasSettings.startDate;
+    const feeInput = document.getElementById("fee-amount-input");
+    if(feeInput) feeInput.value = kasSettings.feeAmount;
     setDropdownValue("dropdown-fee-schedule", kasSettings.scheduleMode);
+
+    // Tampilkan Logo Kelas di Header dan Profil jika ada
+    const headerLogoEl = document.getElementById("header-class-logo");
+    const previewImgEl = document.getElementById("class-logo-preview-img");
+    const placeholderEl = document.getElementById("class-logo-placeholder");
+    
+    if (kasSettings.classLogoURL) {
+      if(headerLogoEl) {
+        headerLogoEl.src = kasSettings.classLogoURL;
+        headerLogoEl.classList.remove("hidden");
+      }
+      if(previewImgEl) {
+        previewImgEl.src = kasSettings.classLogoURL;
+        previewImgEl.classList.remove("hidden");
+      }
+      if(placeholderEl) placeholderEl.classList.add("hidden");
+    }
+
     renderFeeHistory();
     renderMembersChecklist();
   });
@@ -410,15 +453,16 @@ function startRealtimeListeners() {
 function renderLogsList(logs) {
   const container = document.getElementById("logs-list");
   const lastUpdateEl = document.getElementById("kas-last-update");
+  if(!container) return;
 
   if (logs.length === 0) {
     container.innerHTML = `<p class="empty-state">Belum ada riwayat transaksi Uang Kas.</p>`;
-    lastUpdateEl.textContent = "Belum ada mutasi";
+    if(lastUpdateEl) lastUpdateEl.textContent = "Update: Belum ada mutasi";
     return;
   }
 
   const newest = logs[0];
-  lastUpdateEl.textContent = `Update: ${newest.description || "Transaksi baru"}`;
+  if(lastUpdateEl) lastUpdateEl.textContent = `Update: ${newest.description || "Transaksi baru"}`;
 
   container.innerHTML = "";
   logs.forEach((log) => {
@@ -507,7 +551,7 @@ document.getElementById("delete-selected-logs-btn")?.addEventListener("click", (
       await batch.commit();
       selectedLogIds.clear();
       updateBulkDeleteButtonState();
-      showToast(" Seluruh log terpilih berhasil dihapus.");
+      showToast("Seluruh log terpilih berhasil dihapus.");
     }
   );
 });
@@ -556,12 +600,10 @@ function renderMembersChecklist() {
       </div>
     `;
 
-    // Tombol Toggle Bayar / Uncheck (menyimpan & mengembalikan sesuai nominal saat transaksi)
     row.querySelector(".toggle-pay-btn").addEventListener("click", async () => {
       await toggleMemberPayment(member, period, isPaid, recordedAmount);
     });
 
-    // Tombol Hapus Anggota beserta riwayat checklist pembayarannya
     row.querySelector(".delete-member-btn").addEventListener("click", () => {
       openConfirmModal(
         "Hapus Anggota Kelas",
@@ -569,13 +611,11 @@ function renderMembersChecklist() {
         async () => {
           const batch = writeBatch(db);
           batch.delete(doc(db, "members", member.id));
-
           Object.keys(paymentsCache).forEach((key) => {
             if (paymentsCache[key]?.memberId === member.id) {
               batch.delete(doc(db, "member_payments", key));
             }
           });
-
           await batch.commit();
           showToast(`Anggota ${member.name} dan data checklist-nya telah dihapus.`);
         }
@@ -695,12 +735,25 @@ document.getElementById("fee-settings-form")?.addEventListener("submit", async (
   e.preventDefault();
   const newFee = Number(document.getElementById("fee-amount-input").value);
   const newMode = getDropdownValue("dropdown-fee-schedule");
+  const newDate = document.getElementById("start-date-input").value;
 
   if (!newFee || newFee < 500) {
     showToast("Nominal iuran minimal Rp 500.", true);
     return;
   }
 
+  if (newDate !== kasSettings.startDate) {
+    openConfirmModal(
+      "Perubahan Tanggal Mulai", 
+      "Anda mengubah tanggal mulai siklus iuran. Ini akan menggeser perhitungan siklus pembayaran anggota. Apakah Anda yakin?",
+      async () => await saveSettings(newFee, newMode, newDate)
+    );
+  } else {
+    await saveSettings(newFee, newMode, newDate);
+  }
+});
+
+async function saveSettings(newFee, newMode, newDate) {
   const updatedHistory = [
     ...(kasSettings.feeHistory || []),
     {
@@ -714,12 +767,13 @@ document.getElementById("fee-settings-form")?.addEventListener("submit", async (
   await updateDoc(doc(db, "app_config", "kas_main"), {
     feeAmount: newFee,
     scheduleMode: newMode,
+    startDate: newDate,
     feeHistory: updatedHistory
   });
 
-  periodOffset = 0;
-  showToast("Pengaturan nominal iuran & jadwal berhasil disimpan.");
-});
+  periodOffset = 0; // reset tampilan ke siklus awal
+  showToast("Pengaturan berhasil disimpan.");
+}
 
 document.getElementById("manual-balance-form")?.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -771,8 +825,7 @@ photoInput?.addEventListener("change", (e) => {
     return;
   }
 
-  const maxSizeBytes = 2 * 1024 * 1024; // 2 MB
-  if (file.size > maxSizeBytes) {
+  if (file.size > 2 * 1024 * 1024) {
     showToast("Ukuran gambar maksimal 2 MB.", true);
     photoInput.value = "";
     return;
@@ -783,7 +836,6 @@ photoInput?.addEventListener("change", (e) => {
   uploadPhotoBtn.classList.remove("hidden");
 });
 
-// Helper kompresi gambar agar hemat kuota & cepat dimuat di Chat
 function compressImageToDataURL(file, maxDim = 256) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -791,33 +843,24 @@ function compressImageToDataURL(file, maxDim = 256) {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        let w = img.width;
-        let h = img.height;
-        if (w > h && w > maxDim) {
-          h = Math.round((h * maxDim) / w);
-          w = maxDim;
-        } else if (h > maxDim) {
-          w = Math.round((w * maxDim) / h);
-          h = maxDim;
-        }
-        canvas.width = w;
-        canvas.height = h;
+        let w = img.width, h = img.height;
+        if (w > h && w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; } 
+        else if (h > maxDim) { w = Math.round((w * maxDim) / h); h = maxDim; }
+        canvas.width = w; canvas.height = h;
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, w, h);
         resolve(canvas.toDataURL("image/jpeg", 0.82));
       };
-      img.onerror = reject;
-      img.src = ev.target.result;
+      img.onerror = reject; img.src = ev.target.result;
     };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    reader.onerror = reject; reader.readAsDataURL(file);
   });
 }
 
 uploadPhotoBtn?.addEventListener("click", async () => {
   if (!pendingPhotoFile || !currentUser) return;
   uploadPhotoBtn.disabled = true;
-  uploadPhotoBtn.textContent = "Mengupload...";
+  uploadPhotoBtn.textContent = "Mengupload... Mohon tunggu";
 
   try {
     let finalPhotoURL = "";
@@ -826,25 +869,25 @@ uploadPhotoBtn?.addEventListener("click", async () => {
       await uploadBytes(fileRef, pendingPhotoFile);
       finalPhotoURL = await getDownloadURL(fileRef);
     } catch {
-      // Fallback otomatis jika Firebase Storage belum diaktifkan di konsol
       finalPhotoURL = await compressImageToDataURL(pendingPhotoFile, 240);
     }
 
-    await updateDoc(doc(db, "users", currentUser.uid), {
-      photoURL: finalPhotoURL
-    });
-
+    await updateDoc(doc(db, "users", currentUser.uid), { photoURL: finalPhotoURL });
+    
+    // Perbaikan Bug: Langsung update avatar di UI
     currentUserData.photoURL = finalPhotoURL;
-    setupAppUI();
+    setupAppUI(); 
+    
     uploadPhotoBtn.classList.add("hidden");
-    fileHintEl.textContent = "Foto profil berhasil diperbarui!";
+    fileHintEl.textContent = "Foto profil berhasil dipasang!";
     pendingPhotoFile = null;
     showToast("Foto profil berhasil diupload.");
   } catch (err) {
     showToast("Gagal mengupload foto: " + err.message, true);
+    fileHintEl.textContent = "Terjadi kesalahan saat upload.";
   } finally {
     uploadPhotoBtn.disabled = false;
-    uploadPhotoBtn.textContent = "Upload Foto";
+    uploadPhotoBtn.textContent = "Simpan & Upload Foto";
   }
 });
 
@@ -864,6 +907,50 @@ document.getElementById("profile-form")?.addEventListener("submit", async (e) =>
   currentUserData.kelas = newKelas;
   setupAppUI();
   showToast("Profil berhasil diperbarui.");
+});
+
+// =====================================================
+// FITUR UPLOAD LOGO KELAS (KHUSUS ADMIN)
+// =====================================================
+const classLogoInput = document.getElementById("class-logo-input");
+document.getElementById("choose-class-logo-btn")?.addEventListener("click", () => classLogoInput.click());
+
+classLogoInput?.addEventListener("change", (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  pendingClassLogo = file;
+  document.getElementById("upload-class-logo-btn").classList.remove("hidden");
+  document.getElementById("class-logo-hint").textContent = "File siap diupload.";
+});
+
+document.getElementById("upload-class-logo-btn")?.addEventListener("click", async () => {
+  if (!pendingClassLogo || !isAdmin) return;
+  const btn = document.getElementById("upload-class-logo-btn");
+  btn.disabled = true;
+  btn.textContent = "Mengupload...";
+
+  try {
+    let finalLogoURL = "";
+    try {
+      const fileRef = storageRef(storage, `class_logos/logo_${Date.now()}`);
+      await uploadBytes(fileRef, pendingClassLogo);
+      finalLogoURL = await getDownloadURL(fileRef);
+    } catch {
+      finalLogoURL = await compressImageToDataURL(pendingClassLogo, 200);
+    }
+
+    await updateDoc(doc(db, "app_config", "kas_main"), { classLogoURL: finalLogoURL });
+    
+    btn.classList.add("hidden");
+    document.getElementById("class-logo-hint").textContent = "Logo kelas berhasil diupdate.";
+    pendingClassLogo = null;
+    showToast("Logo Kelas berhasil dipasang.");
+  } catch (err) {
+    showToast("Gagal upload logo: " + err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Upload Logo Kelas";
+  }
 });
 
 // =====================================================
