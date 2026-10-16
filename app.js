@@ -1,835 +1,1058 @@
 // app.js
-import { auth, db, googleProvider } from "./firebase-config.js";
+import { auth, db, storage } from "./firebase-config.js";
 import {
   onAuthStateChanged,
-  signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
   signOut
-} from "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js";
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   doc,
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
+  addDoc,
+  onSnapshot,
   query,
   orderBy,
   limit,
-  onSnapshot,
+  serverTimestamp,
   runTransaction,
-  writeBatch,
-  serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+  writeBatch
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-// === IKON BADGE SVG (TANPA EMOJI) ===
-const BADGE_ADMIN_SVG = `
-  <svg viewBox="0 0 24 24" width="16" height="16" fill="#0052FF" aria-label="Verified Admin">
-    <path d="M12 2L15.09 5.26L19.47 4.53L20.21 8.91L23.47 12L20.21 15.09L19.47 19.47L15.09 18.74L12 22L8.91 18.74L4.53 19.47L3.79 15.09L0.53 12L3.79 8.91L4.53 4.53L8.91 5.26L12 2Z"/>
-    <path d="M9.5 12.5L11.2 14.2L15 10.4" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  </svg>
-`;
-
-const BADGE_USER_SVG = `
-  <svg viewBox="0 0 24 24" width="15" height="15" stroke="#52525B" stroke-width="2" fill="none" aria-label="User Badge">
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-  </svg>
-`;
-
-// === STATE GLOBAL ===
+// STATE GLOBAL APLIKASI
 let currentUser = null;
-let currentUserProfile = null;
-let unsubscribeListeners = [];
-let allUsersCache = {};
-let allAnggotaCache = [];
-let selectedWeek = getCurrentISOWeek();
+let currentUserData = null;
+let isAdmin = false;
 
-// === HELPER FORMAT RUPIAH & TANGGAL ===
-function formatRupiah(nominal) {
-  const angka = Number(nominal) || 0;
-  const prefix = angka < 0 ? "-Rp " : "Rp ";
-  return prefix + Math.abs(angka).toLocaleString("id-ID");
+let kasSettings = {
+  balance: 0,
+  feeAmount: 2000,
+  scheduleMode: "weekly", // "weekly" | "daily"
+  feeHistory: []
+};
+
+let periodOffset = 0; // 0 = minggu/hari berjalan
+let membersCache = [];
+let paymentsCache = {};
+let usersDirectoryCache = {};
+let selectedLogIds = new Set();
+let pendingPhotoFile = null;
+
+// SVG BADGES
+const ADMIN_BADGE_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="#1d4ed8" style="vertical-align:middle"><path d="M12 2l2.4 2.4 3.4-.4.8 3.3 3.1 1.5-1.1 3.2 1.1 3.2-3.1 1.5-.8 3.3-3.4-.4L12 22l-2.4-2.4-3.4.4-.8-3.3-3.1-1.5 1.1-3.2-1.1-3.2 3.1-1.5.8-3.3 3.4.4L12 2zm-1.1 13.4l6-6-1.4-1.4-4.6 4.6-2.2-2.2-1.4 1.4 3.6 3.6z"/></svg>`;
+const USER_BADGE_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" style="vertical-align:middle"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
+
+// HELPER FORMAT RUPIAH
+function formatRupiah(num) {
+  return "Rp " + Number(num || 0).toLocaleString("id-ID");
 }
 
-function getTodayDateString() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+// HELPER TOAST
+function showToast(msg, isError = false) {
+  const container = document.getElementById("toast-container");
+  const el = document.createElement("div");
+  el.className = `toast ${isError ? "error" : ""}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
 }
 
-function getCurrentISOWeek() {
-  const date = new Date();
-  const target = new Date(date.valueOf());
-  const dayNr = (date.getDay() + 6) % 7;
-  target.setDate(target.getDate() - dayNr + 3);
-  const firstThursday = target.valueOf();
-  target.setMonth(0, 1);
-  if (target.getDay() !== 4) {
-    target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+// HELPER RENDER AVATAR (FOTO PROFIL ATAU INISIAL HURUF)
+function renderAvatarElement(containerEl, name, photoURL) {
+  if (!containerEl) return;
+  const initial = (name || "U").trim().charAt(0).toUpperCase();
+  if (photoURL) {
+    containerEl.innerHTML = `<img src="${photoURL}" alt="${name}" />`;
+  } else {
+    containerEl.textContent = initial;
   }
-  const weekNumber = 1 + Math.ceil((firstThursday - target) / 604800000);
-  return `${date.getFullYear()}-W${String(weekNumber).padStart(2, "0")}`;
 }
 
-function getBadgeHTML(role) {
-  return role === "admin" ? BADGE_ADMIN_SVG : BADGE_USER_SVG;
-}
-
-function showToast(message) {
-  const toast = document.getElementById("toast-box");
-  toast.textContent = message;
-  toast.classList.remove("hidden");
-  clearTimeout(window._toastTimer);
-  window._toastTimer = setTimeout(() => {
-    toast.classList.add("hidden");
-  }, 3000);
-}
-
-// === PROTEKSI GAMBAR DARI POPUP DOWNLOAD (BIARKAN TEKS BISA DISALIN) ===
-document.addEventListener("contextmenu", (e) => {
-  if (e.target.tagName === "IMG" || e.target.closest("svg")) {
-    e.preventDefault();
+function createAvatarHTML(name, photoURL, sizeClass = "avatar-sm") {
+  const initial = (name || "U").trim().charAt(0).toUpperCase();
+  if (photoURL) {
+    return `<div class="avatar ${sizeClass}"><img src="${photoURL}" alt="${name}" /></div>`;
   }
-});
+  return `<div class="avatar ${sizeClass}">${initial}</div>`;
+}
 
-document.addEventListener("dragstart", (e) => {
-  if (e.target.tagName === "IMG") {
-    e.preventDefault();
-  }
-});
+// =====================================================
+// 1. INISIALISASI CUSTOM DROPDOWN (PENGGANTI <select>)
+// =====================================================
+function initCustomDropdowns() {
+  const dropdowns = document.querySelectorAll(".custom-dropdown");
 
-// === ELEMEN DOM ===
-const authLoading = document.getElementById("auth-loading");
-const authView = document.getElementById("auth-view");
-const appView = document.getElementById("app-view");
-const authForm = document.getElementById("auth-form");
-const authAlert = document.getElementById("auth-alert");
-const tabLogin = document.getElementById("tab-login");
-const tabRegister = document.getElementById("tab-register");
-const registerFields = document.getElementById("register-fields");
-const btnSubmitAuth = document.getElementById("btn-submit-auth");
+  dropdowns.forEach((dropdown) => {
+    const trigger = dropdown.querySelector(".dropdown-trigger");
+    const label = dropdown.querySelector(".dropdown-label");
+    const items = dropdown.querySelectorAll(".dropdown-item");
 
-let isRegisterMode = false;
+    trigger.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = dropdown.classList.contains("open");
+      closeAllDropdowns();
+      if (!isOpen) dropdown.classList.add("open");
+    });
 
-// Toggle Tab Masuk / Daftar
-tabLogin.addEventListener("click", () => {
-  isRegisterMode = false;
-  tabLogin.classList.add("active");
-  tabRegister.classList.remove("active");
-  registerFields.classList.add("hidden");
-  btnSubmitAuth.textContent = "Masuk ke Aplikasi";
-  authAlert.classList.add("hidden");
-});
+    items.forEach((item) => {
+      item.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const val = item.getAttribute("data-value");
+        const text = item.textContent;
 
-tabRegister.addEventListener("click", () => {
-  isRegisterMode = true;
-  tabRegister.classList.add("active");
-  tabLogin.classList.remove("active");
-  registerFields.classList.remove("hidden");
-  btnSubmitAuth.textContent = "Daftar Akun Baru";
-  authAlert.classList.add("hidden");
-});
+        dropdown.setAttribute("data-value", val);
+        label.textContent = text;
 
-// === PROSES LOGIN / REGISTER EMAIL & PASSWORD ===
-authForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  authAlert.classList.add("hidden");
-  btnSubmitAuth.disabled = true;
+        items.forEach((i) => i.classList.remove("selected"));
+        item.classList.add("selected");
+        dropdown.classList.remove("open");
 
-  const email = document.getElementById("auth-email").value.trim();
-  const password = document.getElementById("auth-password").value;
-  const namaInput = document.getElementById("auth-nama").value.trim();
-  const kelasInput = document.getElementById("auth-kelas").value;
+        dropdown.dispatchEvent(new CustomEvent("change", { detail: { value: val, label: text } }));
+      });
+    });
+  });
 
-  try {
-    if (isRegisterMode) {
-      if (!namaInput) throw new Error("Nama lengkap wajib diisi.");
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      await ensureUserDocument(cred.user, namaInput, kelasInput);
+  document.addEventListener("click", closeAllDropdowns);
+}
+
+function closeAllDropdowns() {
+  document.querySelectorAll(".custom-dropdown.open").forEach((d) => d.classList.remove("open"));
+}
+
+function setDropdownValue(dropdownId, value) {
+  const dropdown = document.getElementById(dropdownId);
+  if (!dropdown) return;
+  const label = dropdown.querySelector(".dropdown-label");
+  const items = dropdown.querySelectorAll(".dropdown-item");
+  items.forEach((item) => {
+    if (item.getAttribute("data-value") === value) {
+      item.classList.add("selected");
+      dropdown.setAttribute("data-value", value);
+      if (label) label.textContent = item.textContent;
     } else {
-      const cred = await signInWithEmailAndPassword(auth, email, password);
-      await ensureUserDocument(cred.user);
+      item.classList.remove("selected");
     }
-    authForm.reset();
-  } catch (err) {
-    authAlert.textContent = terjemahkanErrorFirebase(err.code || err.message);
-    authAlert.classList.remove("hidden");
-  } finally {
-    btnSubmitAuth.disabled = false;
-  }
-});
-
-// === LOGIN DENGAN GOOGLE ===
-document.getElementById("btn-google-login").addEventListener("click", async () => {
-  authAlert.classList.add("hidden");
-  try {
-    const cred = await signInWithPopup(auth, googleProvider);
-    await ensureUserDocument(cred.user);
-  } catch (err) {
-    authAlert.textContent = terjemahkanErrorFirebase(err.code || err.message);
-    authAlert.classList.remove("hidden");
-  }
-});
-
-function terjemahkanErrorFirebase(code) {
-  if (code.includes("auth/invalid-credential") || code.includes("auth/wrong-password")) {
-    return "Email atau kata sandi salah.";
-  }
-  if (code.includes("auth/email-already-in-use")) {
-    return "Email sudah terdaftar. Silakan gunakan menu Masuk.";
-  }
-  if (code.includes("auth/popup-closed-by-user")) {
-    return "Jendela login Google ditutup sebelum selesai.";
-  }
-  return code;
+  });
 }
 
-// === PASTIKAN DOKUMEN USER TERSIMPAN DI FIRESTORE ===
-async function ensureUserDocument(user, customNama = null, customKelas = "Kelas 10-1") {
-  const userRef = doc(db, "users", user.uid);
-  const snap = await getDoc(userRef);
+function getDropdownValue(dropdownId) {
+  const dropdown = document.getElementById(dropdownId);
+  return dropdown ? dropdown.getAttribute("data-value") : "";
+}
 
-  if (!snap.exists()) {
-    const defaultNama = customNama || user.displayName || user.email.split("@")[0];
-    const newUserData = {
-      nama: defaultNama,
-      email: user.email,
-      role: "user", // Default role adalah "user", ubah ke "admin" dari console Firestore untuk bendahara
-      kelas: customKelas,
-      badge: "user_verified",
-      createdAt: serverTimestamp()
+// =====================================================
+// 2. MODAL KONFIRMASI HAPUS
+// =====================================================
+let confirmCallback = null;
+const confirmModal = document.getElementById("confirm-modal");
+
+function openConfirmModal(title, message, onConfirm) {
+  document.getElementById("confirm-title").textContent = title;
+  document.getElementById("confirm-message").textContent = message;
+  confirmCallback = onConfirm;
+  confirmModal.classList.remove("hidden");
+}
+
+document.getElementById("confirm-cancel-btn").addEventListener("click", () => {
+  confirmModal.classList.add("hidden");
+  confirmCallback = null;
+});
+
+document.getElementById("confirm-ok-btn").addEventListener("click", async () => {
+  confirmModal.classList.add("hidden");
+  if (typeof confirmCallback === "function") {
+    await confirmCallback();
+    confirmCallback = null;
+  }
+});
+
+// =====================================================
+// 3. SISTEM PERIODE (MINGGUAN 6 HARI vs HARIAN SENIN-SABTU)
+// =====================================================
+function getActiveSchoolDate(offsetDays = 0) {
+  const now = new Date();
+  // Jika hari ini Minggu (0), geser ke Sabtu kemarin
+  if (now.getDay() === 0) {
+    now.setDate(now.getDate() - 1);
+  }
+  // Geser berdasarkan offset hari sekolah (lompati hari Minggu)
+  let steps = offsetDays;
+  const dir = steps >= 0 ? 1 : -1;
+  steps = Math.abs(steps);
+  while (steps > 0) {
+    now.setDate(now.getDate() + dir);
+    if (now.getDay() !== 0) {
+      steps--;
+    }
+  }
+  return now;
+}
+
+function getActivePeriodInfo() {
+  if (kasSettings.scheduleMode === "daily") {
+    const d = getActiveSchoolDate(periodOffset);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    return {
+      key: `DAILY_${yyyy}-${mm}-${dd}`,
+      label: `${dayNames[d.getDay()]}, ${dd}/${mm}/${yyyy}`
     };
-    await setDoc(userRef, newUserData);
+  } else {
+    // Mode Mingguan (Senin - Sabtu dalam minggu tersebut)
+    const now = new Date();
+    const day = now.getDay();
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + diffToMonday + periodOffset * 7);
+
+    const saturday = new Date(monday);
+    saturday.setDate(monday.getDate() + 5);
+
+    const yyyy = monday.getFullYear();
+    const mm = String(monday.getMonth() + 1).padStart(2, "0");
+    const dd = String(monday.getDate()).padStart(2, "0");
+
+    const satDd = String(saturday.getDate()).padStart(2, "0");
+    const satMm = String(saturday.getMonth() + 1).padStart(2, "0");
+
+    return {
+      key: `WEEKLY_${yyyy}-${mm}-${dd}`,
+      label: `Senin ${dd}/${mm} – Sabtu ${satDd}/${satMm}/${yyyy}`
+    };
   }
 }
 
-// === LISTENER AUTH STATE ===
+// =====================================================
+// 4. AUTHENTICATION & NORMALISASI KELAS (10, 11, 12)
+// =====================================================
+function normalizeKelas(rawKelas) {
+  if (!rawKelas) return "Kelas 10";
+  if (rawKelas.startsWith("Kelas 11")) return "Kelas 11";
+  if (rawKelas.startsWith("Kelas 12")) return "Kelas 12";
+  return "Kelas 10";
+}
+
 onAuthStateChanged(auth, async (user) => {
-  clearAllListeners();
+  const loadingOverlay = document.getElementById("loading-overlay");
+  const authView = document.getElementById("auth-view");
+  const appView = document.getElementById("app-view");
 
   if (!user) {
     currentUser = null;
-    currentUserProfile = null;
-    authLoading.classList.add("hidden");
-    appView.classList.add("hidden");
+    currentUserData = null;
     authView.classList.remove("hidden");
+    appView.classList.add("hidden");
+    loadingOverlay.classList.add("hidden");
     return;
   }
 
   currentUser = user;
-  await ensureUserDocument(user);
-  startAppRealtimeListeners(user.uid);
+  const userRef = doc(db, "users", user.uid);
+  const snap = await getDoc(userRef);
+
+  if (!snap.exists()) {
+    const defaultName = user.displayName || user.email.split("@")[0];
+    const newDoc = {
+      nama: defaultName,
+      email: user.email,
+      kelas: "Kelas 10",
+      role: "user",
+      photoURL: user.photoURL || "",
+      createdAt: serverTimestamp()
+    };
+    await setDoc(userRef, newDoc);
+    currentUserData = newDoc;
+  } else {
+    const data = snap.data();
+    const fixedKelas = normalizeKelas(data.kelas);
+    if (fixedKelas !== data.kelas) {
+      await updateDoc(userRef, { kelas: fixedKelas });
+    }
+    currentUserData = { ...data, kelas: fixedKelas };
+  }
+
+  isAdmin = currentUserData.role === "admin";
+  setupAppUI();
+  startRealtimeListeners();
+
+  authView.classList.add("hidden");
+  appView.classList.remove("hidden");
+  loadingOverlay.classList.add("hidden");
 });
 
-function clearAllListeners() {
-  unsubscribeListeners.forEach((unsub) => unsub());
-  unsubscribeListeners = [];
+function setupAppUI() {
+  // Tampilkan tab khusus Admin jika role === admin
+  document.querySelectorAll(".admin-only").forEach((el) => {
+    if (isAdmin) el.classList.remove("hidden");
+    else el.classList.add("hidden");
+  });
+
+  // Update Header & Profile
+  document.getElementById("header-username").textContent = currentUserData.nama;
+  document.getElementById("header-kelas-badge").textContent = currentUserData.kelas;
+  document.getElementById("header-role-icon").innerHTML = isAdmin ? ADMIN_BADGE_SVG : USER_BADGE_SVG;
+  renderAvatarElement(document.getElementById("header-avatar"), currentUserData.nama, currentUserData.photoURL);
+
+  document.getElementById("profile-display-name").textContent = currentUserData.nama;
+  document.getElementById("profile-email-text").textContent = currentUserData.email;
+  document.getElementById("profile-badge-icon").innerHTML = isAdmin ? ADMIN_BADGE_SVG : USER_BADGE_SVG;
+  document.getElementById("profile-role-tag").textContent = `ROLE: ${(currentUserData.role || "user").toUpperCase()}`;
+  document.getElementById("profile-name-input").value = currentUserData.nama;
+  setDropdownValue("dropdown-profile-kelas", currentUserData.kelas);
+  renderAvatarElement(document.getElementById("profile-avatar-preview"), currentUserData.nama, currentUserData.photoURL);
 }
 
-// === INISIALISASI LISTENER REAL-TIME ===
-function startAppRealtimeListeners(uid) {
-  // 1. Listener Dokumen User Sendiri (Deteksi perubahan Role/Kelas secara real-time)
-  const myUserRef = doc(db, "users", uid);
-  const unsubMe = onSnapshot(myUserRef, (snap) => {
-    if (!snap.exists()) return;
-    currentUserProfile = { uid: snap.id, ...snap.data() };
-    renderCurrentUserUI();
-    authLoading.classList.add("hidden");
-    authView.classList.add("hidden");
-    appView.classList.remove("hidden");
-  });
-  unsubscribeListeners.push(unsubMe);
-
-  // 2. Listener Real-time Uang Kas (kas/current)
-  const kasRef = doc(db, "kas", "current");
-  const unsubKas = onSnapshot(kasRef, (snap) => {
-    const nominalEl = document.getElementById("display-uang-kas");
-    const updatedEl = document.getElementById("kas-updated-at");
-
-    if (snap.exists()) {
-      const data = snap.data();
-      nominalEl.textContent = formatRupiah(data.nominal || 0);
-      if (data.updatedAt?.toDate) {
-        updatedEl.textContent = data.updatedAt.toDate().toLocaleString("id-ID");
-      } else {
-        updatedEl.textContent = "Baru saja";
-      }
-    } else {
-      nominalEl.textContent = "Rp 0";
-      updatedEl.textContent = "Belum ada mutasi";
-    }
-  });
-  unsubscribeListeners.push(unsubKas);
-
-  // 3. Listener Log Transaksi (20 terbaru)
-  const transaksiQuery = query(collection(db, "transaksi"), orderBy("timestamp", "desc"), limit(20));
-  const unsubTransaksi = onSnapshot(transaksiQuery, (snap) => {
-    const listEl = document.getElementById("transaksi-list");
-    if (snap.empty) {
-      listEl.innerHTML = `<p class="empty-state">Belum ada riwayat transaksi Uang Kas.</p>`;
+// =====================================================
+// 5. REAL-TIME FIRESTORE LISTENERS
+// =====================================================
+function startRealtimeListeners() {
+  // 5.1 Listener Pengaturan Kas & Saldo Utama
+  onSnapshot(doc(db, "app_config", "kas_main"), async (snap) => {
+    if (!snap.exists()) {
+      const initialConfig = {
+        balance: 0,
+        feeAmount: 2000,
+        scheduleMode: "weekly",
+        feeHistory: [
+          {
+            amount: 2000,
+            mode: "weekly",
+            changedAt: new Date().toISOString(),
+            changedBy: "Sistem"
+          }
+        ]
+      };
+      await setDoc(doc(db, "app_config", "kas_main"), initialConfig);
       return;
     }
 
-    listEl.innerHTML = "";
-    snap.forEach((docSnap) => {
-      const t = docSnap.data();
-      const isPlus = t.aksi === "tambah";
-      const waktu = t.timestamp?.toDate
-        ? t.timestamp.toDate().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })
-        : "Baru saja";
+    const data = snap.data();
+    kasSettings = {
+      balance: Number(data.balance || 0),
+      feeAmount: Number(data.feeAmount || 2000),
+      scheduleMode: data.scheduleMode || "weekly",
+      feeHistory: Array.isArray(data.feeHistory) ? data.feeHistory : []
+    };
 
-      const judul = t.keterangan === "manual"
-        ? `[Manual] ${escapeHTML(t.catatan || "Penyesuaian Uang Kas")}`
-        : `Iuran Kas Mingguan — ${escapeHTML(t.nama || "Anggota")} (${escapeHTML(t.minggu || "-")})`;
+    document.getElementById("total-kas-amount").textContent = formatRupiah(kasSettings.balance);
+    const modeText = kasSettings.scheduleMode === "daily" ? "Hari Sekolah (Senin–Sabtu)" : "Minggu (6 Hari Sekolah)";
+    document.getElementById("kas-schedule-info").textContent = `Iuran: ${formatRupiah(kasSettings.feeAmount)} / ${modeText}`;
 
-      const item = document.createElement("div");
-      item.className = "transaksi-item";
-      item.innerHTML = `
-        <div class="transaksi-info">
-          <span class="transaksi-title">${judul}</span>
-          <span class="transaksi-sub">${waktu}</span>
-        </div>
-        <span class="transaksi-nominal ${isPlus ? "nominal-plus" : "nominal-minus"}">
-          ${isPlus ? "+" : "-"}${formatRupiah(t.nominal)}
-        </span>
-      `;
-      listEl.appendChild(item);
-    });
+    // Update form pengaturan di tab Atur Saldo
+    document.getElementById("fee-amount-input").value = kasSettings.feeAmount;
+    setDropdownValue("dropdown-fee-schedule", kasSettings.scheduleMode);
+    renderFeeHistory();
+    renderMembersChecklist();
   });
-  unsubscribeListeners.push(unsubTransaksi);
 
-  // 4. Listener Daftar Anggota & Checklist Mingguan
-  const anggotaQuery = query(collection(db, "anggota"), orderBy("nama", "asc"));
-  const unsubAnggota = onSnapshot(anggotaQuery, (snap) => {
-    allAnggotaCache = [];
-    snap.forEach((d) => allAnggotaCache.push({ id: d.id, ...d.data() }));
-    renderAnggotaChecklist();
+  // 5.2 Listener Log Transaksi
+  const logsQuery = query(collection(db, "transactions"), orderBy("createdAt", "desc"), limit(50));
+  onSnapshot(logsQuery, (snap) => {
+    const logs = [];
+    snap.forEach((d) => logs.push({ id: d.id, ...d.data() }));
+    renderLogsList(logs);
   });
-  unsubscribeListeners.push(unsubAnggota);
 
-  // 5. Listener Direktori Semua User
-  const usersQuery = query(collection(db, "users"));
-  const unsubUsers = onSnapshot(usersQuery, (snap) => {
-    allUsersCache = {};
+  // 5.3 Listener Anggota Kelas
+  const membersQuery = query(collection(db, "members"), orderBy("name", "asc"));
+  onSnapshot(membersQuery, (snap) => {
+    membersCache = [];
+    snap.forEach((d) => membersCache.push({ id: d.id, ...d.data() }));
+    renderMembersChecklist();
+  });
+
+  // 5.4 Listener Data Pembayaran Anggota
+  onSnapshot(collection(db, "member_payments"), (snap) => {
+    paymentsCache = {};
     snap.forEach((d) => {
-      allUsersCache[d.id] = { uid: d.id, ...d.data() };
+      paymentsCache[d.id] = d.data();
     });
-    renderUserDirectory();
+    renderMembersChecklist();
   });
-  unsubscribeListeners.push(unsubUsers);
 
-  // 6. Listener Global/Kelas Chat (50 pesan terakhir)
-  const chatQuery = query(collection(db, "chats"), orderBy("timestamp", "asc"), limit(50));
-  const unsubChat = onSnapshot(chatQuery, (snap) => {
-    renderChatMessages(snap);
+  // 5.5 Listener Direktori Pengguna
+  onSnapshot(collection(db, "users"), (snap) => {
+    usersDirectoryCache = {};
+    const list = [];
+    snap.forEach((d) => {
+      const u = { id: d.id, ...d.data(), kelas: normalizeKelas(d.data().kelas) };
+      usersDirectoryCache[d.id] = u;
+      list.push(u);
+    });
+    renderRegisteredUsers(list);
   });
-  unsubscribeListeners.push(unsubChat);
 
-  // 7. Listener Kuota Chat Harian User Ini
-  const todayKey = `${uid}_${getTodayDateString()}`;
-  const limitRef = doc(db, "chatLimits", todayKey);
-  const unsubLimit = onSnapshot(limitRef, (snap) => {
-    const used = snap.exists() ? (snap.data().count || 0) : 0;
-    const remaining = Math.max(0, 10 - used);
-    document.getElementById("chat-limit-display").textContent = `${remaining} / 10`;
-    const btnSend = document.getElementById("btn-send-chat");
-    const inputChat = document.getElementById("input-chat");
-    if (remaining <= 0) {
-      btnSend.disabled = true;
-      inputChat.disabled = true;
-      inputChat.placeholder = "Batas 10 pesan hari ini telah habis.";
-    } else {
-      btnSend.disabled = false;
-      inputChat.disabled = false;
-      inputChat.placeholder = "Tulis pesan (maks. 100 karakter)...";
-    }
+  // 5.6 Listener Pesan Chat
+  const chatQuery = query(collection(db, "chats"), orderBy("createdAt", "asc"), limit(100));
+  onSnapshot(chatQuery, (snap) => {
+    const msgs = [];
+    snap.forEach((d) => msgs.push({ id: d.id, ...d.data() }));
+    renderChatMessages(msgs);
   });
-  unsubscribeListeners.push(unsubLimit);
 }
 
-// === RENDER TAMPILAN BERDASARKAN ROLE ("user" vs "admin") ===
-function renderCurrentUserUI() {
-  if (!currentUserProfile) return;
-  const isAdmin = currentUserProfile.role === "admin";
+// =====================================================
+// 6. RENDER & KELOLA LOG TRANSAKSI (SINGLE & BULK DELETE)
+// =====================================================
+function renderLogsList(logs) {
+  const container = document.getElementById("logs-list");
+  const lastUpdateEl = document.getElementById("kas-last-update");
 
-  // Hotbar
-  document.getElementById("header-user-name").textContent = currentUserProfile.nama;
-  document.getElementById("header-kelas-pill").textContent = currentUserProfile.kelas || "Kelas 10-1";
-  document.getElementById("header-user-badge").innerHTML = getBadgeHTML(currentUserProfile.role);
-
-  // Tampilkan/Sembunyikan Menu Khusus Admin
-  const navAnggota = document.getElementById("nav-admin-anggota");
-  const navSaldo = document.getElementById("nav-admin-saldo");
-
-  if (isAdmin) {
-    navAnggota.classList.remove("hidden");
-    navSaldo.classList.remove("hidden");
-  } else {
-    navAnggota.classList.add("hidden");
-    navSaldo.classList.add("hidden");
-  }
-
-  // Isi Form Profile Sendiri
-  document.getElementById("my-profile-avatar").textContent = (currentUserProfile.nama || "U")[0].toUpperCase();
-  document.getElementById("my-profile-name").textContent = currentUserProfile.nama;
-  document.getElementById("my-profile-badge").innerHTML = getBadgeHTML(currentUserProfile.role);
-  document.getElementById("my-profile-email").textContent = currentUserProfile.email;
-  document.getElementById("my-profile-role-label").textContent = `ROLE: ${currentUserProfile.role.toUpperCase()}`;
-  document.getElementById("profile-input-nama").value = currentUserProfile.nama;
-  document.getElementById("profile-select-kelas").value = currentUserProfile.kelas || "Kelas 10-1";
-}
-
-// === RENDER CHECKLIST ANGGOTA & RELASI OTOMATIS KE UANG KAS ===
-const selectMingguEl = document.getElementById("select-minggu");
-selectMingguEl.value = selectedWeek;
-selectMingguEl.addEventListener("change", (e) => {
-  if (e.target.value) {
-    selectedWeek = e.target.value;
-    renderAnggotaChecklist();
-  }
-});
-
-function renderAnggotaChecklist() {
-  const container = document.getElementById("anggota-checklist-container");
-  const totalEl = document.getElementById("rekap-total-anggota");
-  const sudahBayarEl = document.getElementById("rekap-sudah-bayar");
-  const terkumpulEl = document.getElementById("rekap-terkumpul");
-
-  totalEl.textContent = allAnggotaCache.length;
-
-  if (allAnggotaCache.length === 0) {
-    sudahBayarEl.textContent = "0";
-    terkumpulEl.textContent = "Rp 0";
-    container.innerHTML = `<p class="empty-state">Belum ada anggota kelas. Tambahkan anggota baru di atas.</p>`;
+  if (logs.length === 0) {
+    container.innerHTML = `<p class="empty-state">Belum ada riwayat transaksi Uang Kas.</p>`;
+    lastUpdateEl.textContent = "Belum ada mutasi";
     return;
   }
 
-  let countPaid = 0;
-  container.innerHTML = "";
+  const newest = logs[0];
+  lastUpdateEl.textContent = `Update: ${newest.description || "Transaksi baru"}`;
 
-  allAnggotaCache.forEach((anggota) => {
-    const isPaid = anggota.pembayaran && anggota.pembayaran[selectedWeek] === true;
-    if (isPaid) countPaid++;
+  container.innerHTML = "";
+  logs.forEach((log) => {
+    const isPlus = log.type === "add";
+    const checked = selectedLogIds.has(log.id) ? "checked" : "";
+    const dateStr = log.createdAt?.toDate
+      ? log.createdAt.toDate().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })
+      : "Baru saja";
 
     const row = document.createElement("div");
-    row.className = "anggota-row";
+    row.className = "log-item";
     row.innerHTML = `
-      <div class="anggota-meta">
-        <span class="anggota-nama">${escapeHTML(anggota.nama)}</span>
-        <span class="anggota-kelas">${escapeHTML(anggota.kelas || "Kelas 10-1")}</span>
+      <div class="log-left">
+        ${isAdmin ? `<input type="checkbox" class="log-checkbox" data-id="${log.id}" ${checked} />` : ""}
+        <div>
+          <div class="log-desc">${log.description}</div>
+          <div class="log-time">${dateStr} • Oleh ${log.actorName || "Admin"}</div>
+        </div>
       </div>
-      <label class="checklist-label ${isPaid ? "paid" : ""}">
-        <input type="checkbox" data-id="${anggota.id}" ${isPaid ? "checked" : ""} />
-        <span>${isPaid ? "Sudah Bayar (Rp 2.000)" : "Belum Bayar"}</span>
-      </label>
+      <div class="log-right">
+        <span class="log-amount ${isPlus ? "plus" : "minus"}">
+          ${isPlus ? "+" : "-"} ${formatRupiah(log.amount)}
+        </span>
+        ${isAdmin ? `<button type="button" class="btn btn-danger-outline btn-sm delete-single-log-btn" data-id="${log.id}">Hapus</button>` : ""}
+      </div>
+    `;
+    container.appendChild(row);
+  });
+
+  // Event checkbox pilih log
+  container.querySelectorAll(".log-checkbox").forEach((cb) => {
+    cb.addEventListener("change", (e) => {
+      const id = e.target.getAttribute("data-id");
+      if (e.target.checked) selectedLogIds.add(id);
+      else selectedLogIds.delete(id);
+      updateBulkDeleteButtonState();
+    });
+  });
+
+  // Event hapus 1 log
+  container.querySelectorAll(".delete-single-log-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-id");
+      openConfirmModal(
+        "Hapus Log Transaksi",
+        "Apakah Anda yakin ingin menghapus catatan riwayat transaksi ini secara permanen?",
+        async () => {
+          await deleteDoc(doc(db, "transactions", id));
+          selectedLogIds.delete(id);
+          updateBulkDeleteButtonState();
+          showToast("Log transaksi berhasil dihapus.");
+        }
+      );
+    });
+  });
+}
+
+function updateBulkDeleteButtonState() {
+  const btn = document.getElementById("delete-selected-logs-btn");
+  if (!btn) return;
+  btn.textContent = `Hapus Terpilih (${selectedLogIds.size})`;
+  btn.disabled = selectedLogIds.size === 0;
+}
+
+document.getElementById("select-all-logs-btn")?.addEventListener("click", () => {
+  const checkboxes = document.querySelectorAll(".log-checkbox");
+  const allSelected = selectedLogIds.size === checkboxes.length && checkboxes.length > 0;
+  selectedLogIds.clear();
+  checkboxes.forEach((cb) => {
+    cb.checked = !allSelected;
+    if (!allSelected) selectedLogIds.add(cb.getAttribute("data-id"));
+  });
+  updateBulkDeleteButtonState();
+});
+
+document.getElementById("delete-selected-logs-btn")?.addEventListener("click", () => {
+  if (selectedLogIds.size === 0) return;
+  openConfirmModal(
+    "Hapus Banyak Log Sekaligus",
+    `Anda akan menghapus ${selectedLogIds.size} riwayat transaksi yang dipilih secara permanen. Lanjutkan?`,
+    async () => {
+      const batch = writeBatch(db);
+      selectedLogIds.forEach((id) => {
+        batch.delete(doc(db, "transactions", id));
+      });
+      await batch.commit();
+      selectedLogIds.clear();
+      updateBulkDeleteButtonState();
+      showToast(" Seluruh log terpilih berhasil dihapus.");
+    }
+  );
+});
+
+// =====================================================
+// 7. CHECKLIST ANGGOTA & HAPUS ANGGOTA BESERTA DATANYA
+// =====================================================
+function renderMembersChecklist() {
+  const container = document.getElementById("members-checklist-container");
+  if (!container) return;
+
+  const period = getActivePeriodInfo();
+  document.getElementById("current-period-label").textContent = period.label;
+  document.getElementById("checklist-subtitle").textContent =
+    kasSettings.scheduleMode === "daily"
+      ? `Mode: Per Hari Sekolah (Senin–Sabtu) • Nominal Saat Ini: ${formatRupiah(kasSettings.feeAmount)}`
+      : `Mode: Per Minggu (1x dalam 6 hari sekolah) • Nominal Saat Ini: ${formatRupiah(kasSettings.feeAmount)}`;
+
+  if (membersCache.length === 0) {
+    container.innerHTML = `<p class="empty-state">Belum ada anggota kelas. Tambahkan anggota melalui form di atas.</p>`;
+    return;
+  }
+
+  container.innerHTML = "";
+  membersCache.forEach((member) => {
+    const paymentDocId = `${period.key}_${member.id}`;
+    const paymentRecord = paymentsCache[paymentDocId];
+    const isPaid = Boolean(paymentRecord?.paid);
+    const recordedAmount = paymentRecord?.amount || kasSettings.feeAmount;
+
+    const row = document.createElement("div");
+    row.className = "member-row";
+    row.innerHTML = `
+      <div class="member-info">
+        <span class="member-name">${member.name}</span>
+        <span class="member-sub">${normalizeKelas(member.kelas)} • ${
+      isPaid ? `Sudah bayar (${formatRupiah(recordedAmount)})` : `Belum bayar (${formatRupiah(kasSettings.feeAmount)})`
+    }</span>
+      </div>
+      <div class="member-actions">
+        ${isPaid ? `<span class="status-paid-badge">Lunas</span>` : ""}
+        <button type="button" class="btn ${isPaid ? "btn-secondary" : "btn-primary"} btn-sm toggle-pay-btn">
+          ${isPaid ? "Batalkan Centang" : "✓ Tandai Lunas"}
+        </button>
+        <button type="button" class="btn btn-danger btn-sm delete-member-btn">Hapus Anggota</button>
+      </div>
     `;
 
-    const checkbox = row.querySelector("input[type='checkbox']");
-    checkbox.addEventListener("change", async (e) => {
-      checkbox.disabled = true;
-      await togglePembayaranMingguan(anggota.id, selectedWeek, e.target.checked);
-      checkbox.disabled = false;
+    // Tombol Toggle Bayar / Uncheck (menyimpan & mengembalikan sesuai nominal saat transaksi)
+    row.querySelector(".toggle-pay-btn").addEventListener("click", async () => {
+      await toggleMemberPayment(member, period, isPaid, recordedAmount);
+    });
+
+    // Tombol Hapus Anggota beserta riwayat checklist pembayarannya
+    row.querySelector(".delete-member-btn").addEventListener("click", () => {
+      openConfirmModal(
+        "Hapus Anggota Kelas",
+        `Apakah Anda yakin ingin menghapus "${member.name}" beserta seluruh data checklist pembayarannya?`,
+        async () => {
+          const batch = writeBatch(db);
+          batch.delete(doc(db, "members", member.id));
+
+          Object.keys(paymentsCache).forEach((key) => {
+            if (paymentsCache[key]?.memberId === member.id) {
+              batch.delete(doc(db, "member_payments", key));
+            }
+          });
+
+          await batch.commit();
+          showToast(`Anggota ${member.name} dan data checklist-nya telah dihapus.`);
+        }
+      );
     });
 
     container.appendChild(row);
   });
-
-  sudahBayarEl.textContent = `${countPaid} orang`;
-  terkumpulEl.textContent = formatRupiah(countPaid * 2000);
 }
 
-// === TRANSAKSI ATOMIK CHECKLIST PEMBAYARAN -> UANG KAS (+/- Rp 2.000) ===
-async function togglePembayaranMingguan(anggotaId, mingguKey, desiredState) {
-  if (!currentUserProfile || currentUserProfile.role !== "admin") {
-    showToast("Akses ditolak: Hanya Admin yang dapat mengubah checklist.");
-    return;
-  }
-
-  const anggotaRef = doc(db, "anggota", anggotaId);
-  const kasRef = doc(db, "kas", "current");
-  const transaksiRef = doc(collection(db, "transaksi"));
+async function toggleMemberPayment(member, period, currentlyPaid, recordedAmount) {
+  const paymentDocId = `${period.key}_${member.id}`;
+  const paymentRef = doc(db, "member_payments", paymentDocId);
+  const configRef = doc(db, "app_config", "kas_main");
 
   try {
+    const activeFee = Number(kasSettings.feeAmount || 2000);
+    const deltaAmount = currentlyPaid ? Number(recordedAmount) : activeFee;
+
     await runTransaction(db, async (transaction) => {
-      const anggotaDoc = await transaction.get(anggotaRef);
-      const kasDoc = await transaction.get(kasRef);
+      const configSnap = await transaction.get(configRef);
+      const currentBal = Number(configSnap.data()?.balance || 0);
+      const newBal = currentlyPaid ? Math.max(0, currentBal - deltaAmount) : currentBal + deltaAmount;
 
-      if (!anggotaDoc.exists()) {
-        throw new Error("Data anggota tidak ditemukan.");
+      transaction.update(configRef, { balance: newBal });
+
+      if (currentlyPaid) {
+        transaction.delete(paymentRef);
+      } else {
+        transaction.set(paymentRef, {
+          memberId: member.id,
+          memberName: member.name,
+          periodKey: period.key,
+          periodLabel: period.label,
+          paid: true,
+          amount: activeFee,
+          paidAt: serverTimestamp()
+        });
       }
+    });
 
-      const dataAnggota = anggotaDoc.data();
-      const mapPembayaran = dataAnggota.pembayaran || {};
-      const statusSebelumnya = mapPembayaran[mingguKey] === true;
-
-      // Cegah double counting apabila status di database sudah sama dengan desiredState
-      if (statusSebelumnya === desiredState) {
-        return;
-      }
-
-      const nominalKasSekarang = kasDoc.exists() ? (Number(kasDoc.data().nominal) || 0) : 0;
-      const selisih = desiredState ? 2000 : -2000;
-      const nominalKasBaru = nominalKasSekarang + selisih;
-
-      // 1. Update boolean pembayaran minggu tersebut pada dokumen anggota
-      const pembayaranUpdated = { ...mapPembayaran, [mingguKey]: desiredState };
-      transaction.update(anggotaRef, {
-        pembayaran: pembayaranUpdated
-      });
-
-      // 2. Update nominal Uang Kas secara atomik
-      transaction.set(kasRef, {
-        nominal: nominalKasBaru,
-        updatedAt: serverTimestamp(),
-        updatedBy: currentUser.uid
-      }, { merge: true });
-
-      // 3. Catat log transaksi
-      transaction.set(transaksiRef, {
-        anggotaId: anggotaId,
-        nama: dataAnggota.nama,
-        minggu: mingguKey,
-        aksi: desiredState ? "tambah" : "kurang",
-        nominal: 2000,
-        keterangan: "mingguan",
-        oleh: currentUser.uid,
-        timestamp: serverTimestamp()
-      });
+    await addDoc(collection(db, "transactions"), {
+      type: currentlyPaid ? "subtract" : "add",
+      amount: deltaAmount,
+      description: currentlyPaid
+        ? `Pembatalan iuran: ${member.name} (${period.label})`
+        : `Iuran kas lunas: ${member.name} (${period.label})`,
+      actorName: currentUserData.nama,
+      createdAt: serverTimestamp()
     });
 
     showToast(
-      desiredState
-        ? "Checklist disimpan: Uang Kas bertambah Rp 2.000"
-        : "Checklist dibatalkan: Uang Kas dikurangi Rp 2.000"
+      currentlyPaid
+        ? `Pembayaran ${member.name} dibatalkan (-${formatRupiah(deltaAmount)})`
+        : `${member.name} ditandai lunas (+${formatRupiah(deltaAmount)})`
     );
   } catch (err) {
-    console.error("Gagal memproses transaksi checklist:", err);
-    showToast("Gagal memperbarui status pembayaran.");
-    renderAnggotaChecklist();
+    showToast("Gagal memperbarui pembayaran: " + err.message, true);
   }
 }
 
-// === TAMBAH ANGGOTA BARU (ADMIN) ===
-document.getElementById("form-tambah-anggota").addEventListener("submit", async (e) => {
+document.getElementById("prev-period-btn")?.addEventListener("click", () => {
+  periodOffset -= 1;
+  renderMembersChecklist();
+});
+
+document.getElementById("next-period-btn")?.addEventListener("click", () => {
+  periodOffset += 1;
+  renderMembersChecklist();
+});
+
+document.getElementById("add-member-form")?.addEventListener("submit", async (e) => {
   e.preventDefault();
-  if (!currentUserProfile || currentUserProfile.role !== "admin") return;
+  const nameInput = document.getElementById("member-name-input");
+  const name = nameInput.value.trim();
+  const kelas = getDropdownValue("dropdown-member-kelas");
+  if (!name) return;
 
-  const inputNama = document.getElementById("input-nama-anggota");
-  const inputKelas = document.getElementById("input-kelas-anggota");
-  const nama = inputNama.value.trim();
-  const kelas = inputKelas.value;
-
-  if (!nama) return;
-
-  try {
-    const newAnggotaRef = doc(collection(db, "anggota"));
-    await setDoc(newAnggotaRef, {
-      nama,
-      kelas,
-      pembayaran: {},
-      createdAt: serverTimestamp()
-    });
-    inputNama.value = "";
-    showToast(`Anggota "${nama}" berhasil ditambahkan.`);
-  } catch (err) {
-    console.error(err);
-    showToast("Gagal menambahkan anggota.");
-  }
+  await addDoc(collection(db, "members"), {
+    name,
+    kelas,
+    createdAt: serverTimestamp()
+  });
+  nameInput.value = "";
+  showToast(`Anggota "${name}" berhasil ditambahkan.`);
 });
 
-// === ATUR SALDO / UANG KAS MANUAL (ADMIN) ===
-document.getElementById("form-atur-saldo").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  if (!currentUserProfile || currentUserProfile.role !== "admin") return;
-
-  const aksi = document.getElementById("saldo-aksi").value;
-  const nominalInput = Number(document.getElementById("saldo-nominal").value);
-  const catatan = document.getElementById("saldo-catatan").value.trim();
-  const btnSubmit = document.getElementById("btn-submit-saldo");
-
-  if (!nominalInput || nominalInput <= 0 || !catatan) return;
-
-  btnSubmit.disabled = true;
-  const kasRef = doc(db, "kas", "current");
-  const transaksiRef = doc(collection(db, "transaksi"));
-
-  try {
-    await runTransaction(db, async (transaction) => {
-      const kasDoc = await transaction.get(kasRef);
-      const currentNominal = kasDoc.exists() ? (Number(kasDoc.data().nominal) || 0) : 0;
-      const delta = aksi === "tambah" ? nominalInput : -nominalInput;
-      const updatedNominal = currentNominal + delta;
-
-      transaction.set(kasRef, {
-        nominal: updatedNominal,
-        updatedAt: serverTimestamp(),
-        updatedBy: currentUser.uid
-      }, { merge: true });
-
-      transaction.set(transaksiRef, {
-        anggotaId: "-",
-        nama: currentUserProfile.nama,
-        minggu: "-",
-        aksi: aksi,
-        nominal: nominalInput,
-        keterangan: "manual",
-        catatan: catatan,
-        oleh: currentUser.uid,
-        timestamp: serverTimestamp()
-      });
-    });
-
-    document.getElementById("form-atur-saldo").reset();
-    showToast("Penyesuaian Uang Kas manual berhasil disimpan.");
-  } catch (err) {
-    console.error(err);
-    showToast("Gagal menyimpan penyesuaian Uang Kas.");
-  } finally {
-    btnSubmit.disabled = false;
-  }
-});
-
-// === FITUR CHAT DENGAN VALIDASI 100 KARAKTER & LIMIT 10 PESAN/HARI ===
-const inputChatEl = document.getElementById("input-chat");
-const charCountEl = document.getElementById("chat-char-count");
-
-inputChatEl.addEventListener("input", () => {
-  charCountEl.textContent = `${inputChatEl.value.length}/100`;
-});
-
-document.getElementById("form-chat").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  if (!currentUser || !currentUserProfile) return;
-
-  const pesan = inputChatEl.value.trim();
-  if (!pesan || pesan.length > 100) return;
-
-  const btnSend = document.getElementById("btn-send-chat");
-  btnSend.disabled = true;
-
-  const todayStr = getTodayDateString();
-  const limitDocId = `${currentUser.uid}_${todayStr}`;
-  const limitRef = doc(db, "chatLimits", limitDocId);
-  const newChatRef = doc(collection(db, "chats"));
-
-  try {
-    await runTransaction(db, async (transaction) => {
-      const limitSnap = await transaction.get(limitRef);
-      const currentCount = limitSnap.exists() ? (Number(limitSnap.data().count) || 0) : 0;
-
-      if (currentCount >= 10) {
-        throw new Error("LIMIT_EXCEEDED");
-      }
-
-      // 1. Naikkan counter harian user
-      transaction.set(limitRef, {
-        uid: currentUser.uid,
-        tanggal: todayStr,
-        count: currentCount + 1
-      });
-
-      // 2. Simpan pesan chat beserta tanggal untuk diverifikasi oleh Firestore Security Rules
-      transaction.set(newChatRef, {
-        uid: currentUser.uid,
-        nama: currentUserProfile.nama,
-        role: currentUserProfile.role,
-        kelas: currentUserProfile.kelas || "Kelas 10-1",
-        pesan: pesan,
-        tanggal: todayStr,
-        timestamp: serverTimestamp()
-      });
-    });
-
-    inputChatEl.value = "";
-    charCountEl.textContent = "0/100";
-  } catch (err) {
-    if (err.message === "LIMIT_EXCEEDED") {
-      showToast("Batas maksimal 10 pesan per hari telah tercapai.");
-    } else {
-      console.error(err);
-      showToast("Gagal mengirim pesan.");
-    }
-  } finally {
-    btnSend.disabled = false;
-  }
-});
-
-function renderChatMessages(snap) {
-  const box = document.getElementById("chat-messages");
-  if (snap.empty) {
-    box.innerHTML = `<p class="empty-state">Belum ada percakapan. Mulailah mengirim pesan!</p>`;
+// =====================================================
+// 8. PENGATURAN IURAN & PENYESUAIAN SALDO MANUAL
+// =====================================================
+function renderFeeHistory() {
+  const container = document.getElementById("fee-history-list");
+  if (!container) return;
+  const history = kasSettings.feeHistory || [];
+  if (history.length === 0) {
+    container.innerHTML = `<p class="empty-state-sm">Belum ada riwayat perubahan nominal.</p>`;
     return;
   }
 
-  box.innerHTML = "";
-  snap.forEach((docSnap) => {
-    const c = docSnap.data();
-    const isMine = currentUser && c.uid === currentUser.uid;
-    const latestUser = allUsersCache[c.uid];
-    const senderName = latestUser ? latestUser.nama : c.nama;
-    const senderRole = latestUser ? latestUser.role : (c.role || "user");
-    const senderKelas = latestUser ? latestUser.kelas : (c.kelas || "Kelas 10-1");
+  container.innerHTML = "";
+  [...history].reverse().slice(0, 8).forEach((item) => {
+    const modeLabel = item.mode === "daily" ? "Per Hari (Senin–Sabtu)" : "Per Minggu (6 Hari Sekolah)";
+    const dateText = item.changedAt
+      ? new Date(item.changedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })
+      : "-";
+    const div = document.createElement("div");
+    div.className = "fee-history-item";
+    div.innerHTML = `
+      <span><strong>${formatRupiah(item.amount)}</strong> • ${modeLabel}</span>
+      <span>${dateText} (${item.changedBy || "Admin"})</span>
+    `;
+    container.appendChild(div);
+  });
+}
 
-    const jam = c.timestamp?.toDate
-      ? c.timestamp.toDate().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
+document.getElementById("fee-settings-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const newFee = Number(document.getElementById("fee-amount-input").value);
+  const newMode = getDropdownValue("dropdown-fee-schedule");
+
+  if (!newFee || newFee < 500) {
+    showToast("Nominal iuran minimal Rp 500.", true);
+    return;
+  }
+
+  const updatedHistory = [
+    ...(kasSettings.feeHistory || []),
+    {
+      amount: newFee,
+      mode: newMode,
+      changedAt: new Date().toISOString(),
+      changedBy: currentUserData.nama
+    }
+  ];
+
+  await updateDoc(doc(db, "app_config", "kas_main"), {
+    feeAmount: newFee,
+    scheduleMode: newMode,
+    feeHistory: updatedHistory
+  });
+
+  periodOffset = 0;
+  showToast("Pengaturan nominal iuran & jadwal berhasil disimpan.");
+});
+
+document.getElementById("manual-balance-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const type = getDropdownValue("dropdown-adjust-type");
+  const amount = Number(document.getElementById("adjust-amount-input").value);
+  const note = document.getElementById("adjust-note-input").value.trim();
+
+  if (!amount || amount <= 0 || !note) return;
+
+  const configRef = doc(db, "app_config", "kas_main");
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(configRef);
+    const cur = Number(snap.data()?.balance || 0);
+    const next = type === "add" ? cur + amount : Math.max(0, cur - amount);
+    tx.update(configRef, { balance: next });
+  });
+
+  await addDoc(collection(db, "transactions"), {
+    type,
+    amount,
+    description: note,
+    actorName: currentUserData.nama,
+    createdAt: serverTimestamp()
+  });
+
+  document.getElementById("adjust-amount-input").value = "";
+  document.getElementById("adjust-note-input").value = "";
+  showToast("Penyesuaian saldo uang kas berhasil disimpan.");
+});
+
+// =====================================================
+// 9. UPLOAD FOTO PROFIL (FIREBASE STORAGE + VALIDASI)
+// =====================================================
+const photoInput = document.getElementById("profile-photo-input");
+const choosePhotoBtn = document.getElementById("choose-photo-btn");
+const uploadPhotoBtn = document.getElementById("upload-photo-btn");
+const fileHintEl = document.getElementById("selected-file-name");
+
+choosePhotoBtn?.addEventListener("click", () => photoInput.click());
+
+photoInput?.addEventListener("change", (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const validTypes = ["image/jpeg", "image/png", "image/webp"];
+  if (!validTypes.includes(file.type)) {
+    showToast("Format file harus berupa gambar JPG, PNG, atau WebP.", true);
+    photoInput.value = "";
+    return;
+  }
+
+  const maxSizeBytes = 2 * 1024 * 1024; // 2 MB
+  if (file.size > maxSizeBytes) {
+    showToast("Ukuran gambar maksimal 2 MB.", true);
+    photoInput.value = "";
+    return;
+  }
+
+  pendingPhotoFile = file;
+  fileHintEl.textContent = `Terpilih: ${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
+  uploadPhotoBtn.classList.remove("hidden");
+});
+
+// Helper kompresi gambar agar hemat kuota & cepat dimuat di Chat
+function compressImageToDataURL(file, maxDim = 256) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let w = img.width;
+        let h = img.height;
+        if (w > h && w > maxDim) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else if (h > maxDim) {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.onerror = reject;
+      img.src = ev.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+uploadPhotoBtn?.addEventListener("click", async () => {
+  if (!pendingPhotoFile || !currentUser) return;
+  uploadPhotoBtn.disabled = true;
+  uploadPhotoBtn.textContent = "Mengupload...";
+
+  try {
+    let finalPhotoURL = "";
+    try {
+      const fileRef = storageRef(storage, `profile_photos/${currentUser.uid}_${Date.now()}`);
+      await uploadBytes(fileRef, pendingPhotoFile);
+      finalPhotoURL = await getDownloadURL(fileRef);
+    } catch {
+      // Fallback otomatis jika Firebase Storage belum diaktifkan di konsol
+      finalPhotoURL = await compressImageToDataURL(pendingPhotoFile, 240);
+    }
+
+    await updateDoc(doc(db, "users", currentUser.uid), {
+      photoURL: finalPhotoURL
+    });
+
+    currentUserData.photoURL = finalPhotoURL;
+    setupAppUI();
+    uploadPhotoBtn.classList.add("hidden");
+    fileHintEl.textContent = "Foto profil berhasil diperbarui!";
+    pendingPhotoFile = null;
+    showToast("Foto profil berhasil diupload.");
+  } catch (err) {
+    showToast("Gagal mengupload foto: " + err.message, true);
+  } finally {
+    uploadPhotoBtn.disabled = false;
+    uploadPhotoBtn.textContent = "Upload Foto";
+  }
+});
+
+// Simpan Perubahan Nama & Kelas di Profile
+document.getElementById("profile-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const newName = document.getElementById("profile-name-input").value.trim();
+  const newKelas = getDropdownValue("dropdown-profile-kelas");
+  if (!newName) return;
+
+  await updateDoc(doc(db, "users", currentUser.uid), {
+    nama: newName,
+    kelas: newKelas
+  });
+
+  currentUserData.nama = newName;
+  currentUserData.kelas = newKelas;
+  setupAppUI();
+  showToast("Profil berhasil diperbarui.");
+});
+
+// =====================================================
+// 10. CHAT REAL-TIME DENGAN FOTO PROFIL
+// =====================================================
+function renderChatMessages(messages) {
+  const container = document.getElementById("chat-messages");
+  if (!container) return;
+
+  if (messages.length === 0) {
+    container.innerHTML = `<p class="empty-state">Belum ada pesan diskusi. Mulailah percakapan!</p>`;
+    return;
+  }
+
+  container.innerHTML = "";
+  messages.forEach((msg) => {
+    const isMine = msg.uid === currentUser?.uid;
+    const senderProfile = usersDirectoryCache[msg.uid];
+    const senderName = senderProfile?.nama || msg.senderName || "User";
+    const senderPhoto = senderProfile?.photoURL || msg.senderPhoto || "";
+    const senderIsAdmin = (senderProfile?.role || msg.senderRole) === "admin";
+
+    const timeStr = msg.createdAt?.toDate
+      ? msg.createdAt.toDate().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
       : "";
 
-    const bubble = document.createElement("div");
-    bubble.className = `chat-bubble ${isMine ? "mine" : ""}`;
-    bubble.innerHTML = `
-      <div class="chat-sender-bar" data-uid="${c.uid}">
-        <span class="chat-sender-name">${escapeHTML(senderName)}</span>
-        <span class="badge-slot">${getBadgeHTML(senderRole)}</span>
-        <span class="chat-sender-kelas">(${escapeHTML(senderKelas)})</span>
+    const item = document.createElement("div");
+    item.className = `chat-item ${isMine ? "mine" : ""}`;
+    item.innerHTML = `
+      ${createAvatarHTML(senderName, senderPhoto, "avatar-sm")}
+      <div class="chat-bubble">
+        <div class="chat-sender">
+          <span>${senderName}</span>
+          ${senderIsAdmin ? ADMIN_BADGE_SVG : USER_BADGE_SVG}
+        </div>
+        <div class="chat-text"></div>
+        <div class="chat-time">${timeStr}</div>
       </div>
-      <div class="chat-text">${escapeHTML(c.pesan)}</div>
-      <span class="chat-time">${jam}</span>
     `;
-
-    bubble.querySelector(".chat-sender-bar").addEventListener("click", () => {
-      openUserProfileModal(c.uid);
-    });
-
-    box.appendChild(bubble);
+    item.querySelector(".chat-text").textContent = msg.text;
+    container.appendChild(item);
   });
 
-  box.scrollTop = box.scrollHeight;
+  container.scrollTop = container.scrollHeight;
 }
 
-// === UPDATE PROFIL & KELAS SENDIRI ===
-document.getElementById("form-update-profile").addEventListener("submit", async (e) => {
+document.getElementById("chat-form")?.addEventListener("submit", async (e) => {
   e.preventDefault();
-  if (!currentUser) return;
+  const input = document.getElementById("chat-input");
+  const text = input.value.trim();
+  if (!text || !currentUser) return;
 
-  const namaBaru = document.getElementById("profile-input-nama").value.trim();
-  const kelasBaru = document.getElementById("profile-select-kelas").value;
-  if (!namaBaru) return;
-
-  const btnSave = document.getElementById("btn-save-profile");
-  btnSave.disabled = true;
-
-  try {
-    await updateDoc(doc(db, "users", currentUser.uid), {
-      nama: namaBaru,
-      kelas: kelasBaru
-    });
-    showToast("Profil dan kelas berhasil diperbarui.");
-  } catch (err) {
-    console.error(err);
-    showToast("Gagal memperbarui profil.");
-  } finally {
-    btnSave.disabled = false;
-  }
+  input.value = "";
+  await addDoc(collection(db, "chats"), {
+    uid: currentUser.uid,
+    senderName: currentUserData.nama,
+    senderPhoto: currentUserData.photoURL || "",
+    senderRole: currentUserData.role || "user",
+    text,
+    createdAt: serverTimestamp()
+  });
 });
 
-// === DIREKTORI & MODAL LIHAT PROFIL USER LAIN ===
-function renderUserDirectory() {
-  const listEl = document.getElementById("directory-user-list");
-  const usersArr = Object.values(allUsersCache);
+// =====================================================
+// 11. DIREKTORI PENGGUNA TERDAFTAR
+// =====================================================
+function renderRegisteredUsers(users) {
+  const container = document.getElementById("registered-users-list");
+  if (!container) return;
 
-  if (usersArr.length === 0) {
-    listEl.innerHTML = `<p class="empty-state">Belum ada pengguna.</p>`;
-    return;
-  }
-
-  listEl.innerHTML = "";
-  usersArr.forEach((u) => {
+  container.innerHTML = "";
+  users.forEach((u) => {
+    const uAdmin = u.role === "admin";
     const item = document.createElement("div");
-    item.className = "directory-item";
+    item.className = "user-dir-item";
     item.innerHTML = `
-      <div class="directory-left">
-        <div class="avatar-circle">${(u.nama || "U")[0].toUpperCase()}</div>
+      <div class="user-dir-left">
+        ${createAvatarHTML(u.nama, u.photoURL, "avatar-sm")}
         <div>
-          <div class="name-with-badge">
-            <strong>${escapeHTML(u.nama)}</strong>
-            ${getBadgeHTML(u.role)}
+          <div style="font-weight:600; display:flex; align-items:center; gap:5px;">
+            <span>${u.nama}</span>
+            ${uAdmin ? ADMIN_BADGE_SVG : USER_BADGE_SVG}
           </div>
-          <span class="anggota-kelas">${escapeHTML(u.kelas || "Kelas 10-1")}</span>
+          <div style="font-size:12px; color:#64748b;">${u.kelas}</div>
         </div>
       </div>
-      <span class="role-tag">${(u.role || "user").toUpperCase()}</span>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span class="role-chip">${(u.role || "user").toUpperCase()}</span>
+        <button type="button" class="btn btn-secondary btn-sm detail-user-btn">Detail</button>
+      </div>
     `;
-    item.addEventListener("click", () => openUserProfileModal(u.uid));
-    listEl.appendChild(item);
+
+    item.querySelector(".detail-user-btn").addEventListener("click", () => {
+      const modal = document.getElementById("user-detail-modal");
+      document.getElementById("user-detail-body").innerHTML = `
+        <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px;">
+          ${createAvatarHTML(u.nama, u.photoURL, "avatar-lg")}
+          <div>
+            <div style="font-size:16px; font-weight:700;">${u.nama} ${uAdmin ? ADMIN_BADGE_SVG : USER_BADGE_SVG}</div>
+            <div style="font-size:13px; color:#64748b;">${u.email || "-"}</div>
+            <div style="margin-top:4px;"><span class="badge-kelas">${u.kelas}</span></div>
+          </div>
+        </div>
+      `;
+      modal.classList.remove("hidden");
+    });
+
+    container.appendChild(item);
   });
 }
 
-function openUserProfileModal(targetUid) {
-  const userObj = allUsersCache[targetUid];
-  if (!userObj) {
-    showToast("Data profil pengguna tidak ditemukan.");
-    return;
+document.getElementById("close-user-detail-btn")?.addEventListener("click", () => {
+  document.getElementById("user-detail-modal").classList.add("hidden");
+});
+
+// =====================================================
+// 12. NAVIGASI TAB & AUTH EVENTS
+// =====================================================
+document.querySelectorAll(".nav-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".nav-tab").forEach((t) => t.classList.remove("active"));
+    document.querySelectorAll(".tab-pane").forEach((p) => p.classList.add("hidden"));
+
+    tab.classList.add("active");
+    const target = tab.getAttribute("data-target");
+    document.getElementById(target)?.classList.remove("hidden");
+  });
+});
+
+document.getElementById("tab-login")?.addEventListener("click", () => {
+  document.getElementById("tab-login").classList.add("active");
+  document.getElementById("tab-register").classList.remove("active");
+  document.getElementById("login-form").classList.remove("hidden");
+  document.getElementById("register-form").classList.add("hidden");
+});
+
+document.getElementById("tab-register")?.addEventListener("click", () => {
+  document.getElementById("tab-register").classList.add("active");
+  document.getElementById("tab-login").classList.remove("active");
+  document.getElementById("register-form").classList.remove("hidden");
+  document.getElementById("login-form").classList.add("hidden");
+});
+
+document.getElementById("login-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("login-email").value.trim();
+  const pass = document.getElementById("login-password").value;
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+  } catch (err) {
+    showToast("Gagal masuk: Periksa email atau kata sandi Anda.", true);
   }
-
-  document.getElementById("modal-user-avatar").textContent = (userObj.nama || "U")[0].toUpperCase();
-  document.getElementById("modal-user-name").textContent = userObj.nama;
-  document.getElementById("modal-user-badge").innerHTML = getBadgeHTML(userObj.role);
-  document.getElementById("modal-user-role").textContent = `ROLE: ${(userObj.role || "user").toUpperCase()}`;
-  document.getElementById("modal-user-kelas").textContent = userObj.kelas || "Kelas 10-1";
-  document.getElementById("modal-user-email").textContent = userObj.email || "-";
-  document.getElementById("modal-user-badge-text").textContent =
-    userObj.role === "admin" ? "Verified Bendahara (Centang Biru)" : "Anggota Kelas Terdaftar";
-
-  document.getElementById("user-modal-overlay").classList.remove("hidden");
-}
-
-document.getElementById("btn-close-modal").addEventListener("click", () => {
-  document.getElementById("user-modal-overlay").classList.add("hidden");
 });
 
-document.getElementById("user-modal-overlay").addEventListener("click", (e) => {
-  if (e.target.id === "user-modal-overlay") {
-    e.currentTarget.classList.add("hidden");
+document.getElementById("register-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const nama = document.getElementById("reg-name").value.trim();
+  const kelas = getDropdownValue("dropdown-reg-kelas");
+  const email = document.getElementById("reg-email").value.trim();
+  const pass = document.getElementById("reg-password").value;
+
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    await setDoc(doc(db, "users", cred.user.uid), {
+      nama,
+      kelas,
+      email,
+      role: "user",
+      photoURL: "",
+      createdAt: serverTimestamp()
+    });
+  } catch (err) {
+    showToast("Gagal mendaftar: " + err.message, true);
   }
 });
 
-// === NAVIGASI ANTAR MENU & DRAWER HAMBURGER ===
-const navButtons = document.querySelectorAll(".nav-item");
-const viewSections = document.querySelectorAll(".view-section");
-
-function switchSection(targetId) {
-  navButtons.forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.target === targetId);
-  });
-  viewSections.forEach((sec) => {
-    sec.classList.toggle("hidden", sec.id !== targetId);
-  });
-}
-
-navButtons.forEach((btn) => {
-  btn.addEventListener("click", () => switchSection(btn.dataset.target));
+document.getElementById("google-login-btn")?.addEventListener("click", async () => {
+  try {
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+  } catch (err) {
+    showToast("Login Google dibatalkan atau gagal.", true);
+  }
 });
 
-document.getElementById("hotbar-user-btn").addEventListener("click", () => {
-  switchSection("section-profile");
-});
-
-// Hamburger Drawer
-const sideDrawer = document.getElementById("side-drawer");
-const drawerOverlay = document.getElementById("drawer-overlay");
-
-function toggleDrawer(open) {
-  sideDrawer.classList.toggle("open", open);
-  drawerOverlay.classList.toggle("hidden", !open);
-}
-
-document.getElementById("btn-open-drawer").addEventListener("click", () => toggleDrawer(true));
-document.getElementById("btn-close-drawer").addEventListener("click", () => toggleDrawer(false));
-drawerOverlay.addEventListener("click", () => toggleDrawer(false));
-
-// Logout
-document.getElementById("btn-logout").addEventListener("click", async () => {
-  toggleDrawer(false);
+document.getElementById("logout-btn")?.addEventListener("click", async () => {
   await signOut(auth);
+  showToast("Anda telah keluar dari akun.");
 });
 
-function escapeHTML(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
+// Jalankan inisialisasi dropdown custom saat DOM siap
+initCustomDropdowns();
