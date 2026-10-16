@@ -2,8 +2,9 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Bank Bendahara — Sistem Informasi Pengelola Uang Kas Kelas</title>
+  <link rel="icon" type="image/png" href="logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -11,35 +12,26 @@
 </head>
 <body>
 
-  <!-- LOADING OVERLAY -->
-  <div id="loading-overlay" class="loading-overlay">
-    <div class="spinner"></div>
-    <p>Memuat sesi Bank Bendahara...</p>
-  </div>
-
-  <!-- TOAST NOTIFICATION -->
+  <!-- LOADING OVERLAY & TOAST -->
+  <div id="loading-overlay" class="loading-overlay"><div class="spinner"></div><p>Memuat sesi...</p></div>
   <div id="toast-container" class="toast-container"></div>
 
   <!-- MODAL KONFIRMASI HAPUS -->
   <div id="confirm-modal" class="modal-backdrop hidden">
     <div class="modal-card">
-      <div class="modal-header">
-        <h3 id="confirm-title">Konfirmasi Penghapusan</h3>
-      </div>
-      <p id="confirm-message" class="modal-body">Apakah Anda yakin ingin menghapus data ini secara permanen?</p>
+      <div class="modal-header"><h3 id="confirm-title">Konfirmasi Penghapusan</h3></div>
+      <p id="confirm-message" class="modal-body">Apakah Anda yakin?</p>
       <div class="modal-actions">
         <button type="button" id="confirm-cancel-btn" class="btn btn-secondary">Batal</button>
-        <button type="button" id="confirm-ok-btn" class="btn btn-danger">Ya, Hapus Permanen</button>
+        <button type="button" id="confirm-ok-btn" class="btn btn-danger">Ya, Lanjutkan</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL DETAIL PROFIL PENGGUNA -->
+  <!-- MODAL DETAIL USER -->
   <div id="user-detail-modal" class="modal-backdrop hidden">
     <div class="modal-card">
-      <div class="modal-header">
-        <h3>Detail Pengguna</h3>
-      </div>
+      <div class="modal-header"><h3>Detail Pengguna</h3></div>
       <div id="user-detail-body" class="modal-body"></div>
       <div class="modal-actions">
         <button type="button" id="close-user-detail-btn" class="btn btn-secondary">Tutup</button>
@@ -47,53 +39,39 @@
     </div>
   </div>
 
-  <!-- HALAMAN AUTH (LOGIN & REGISTER) -->
+  <!-- HALAMAN AUTH -->
   <main id="auth-view" class="auth-wrapper hidden">
     <div class="auth-card">
       <div class="auth-brand">
-        <div class="brand-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="5" width="20" height="14" rx="2" />
-            <line x1="2" y1="10" x2="22" y2="10" />
-          </svg>
-        </div>
+        <img src="logo.png" alt="Bank Bendahara Logo" style="width: 80px; height: 80px; object-fit: contain; margin-bottom: 12px;" />
         <h1>Bank Bendahara</h1>
         <p>Sistem Informasi Pengelola Uang Kas Kelas</p>
       </div>
-
       <div class="auth-tabs">
         <button type="button" id="tab-login" class="auth-tab active">Masuk</button>
         <button type="button" id="tab-register" class="auth-tab">Daftar Akun</button>
       </div>
-
-      <!-- FORM LOGIN -->
       <form id="login-form" class="form-stack">
         <div class="form-group">
-          <label for="login-email">Alamat Email</label>
+          <label>Alamat Email</label>
           <input type="email" id="login-email" class="form-input" placeholder="nama@sekolah.id" required />
         </div>
         <div class="form-group">
-          <label for="login-password">Kata Sandi</label>
+          <label>Kata Sandi</label>
           <input type="password" id="login-password" class="form-input" placeholder="Minimal 6 karakter" required />
         </div>
         <button type="submit" class="btn btn-primary btn-block">Masuk ke Aplikasi</button>
       </form>
-
-      <!-- FORM REGISTER -->
       <form id="register-form" class="form-stack hidden">
         <div class="form-group">
-          <label for="reg-name">Nama Lengkap</label>
-          <input type="text" id="reg-name" class="form-input" placeholder="Masukkan nama lengkap" required />
+          <label>Nama Lengkap</label>
+          <input type="text" id="reg-name" class="form-input" placeholder="Masukkan nama" required />
         </div>
-
         <div class="form-group">
           <label>Pilih Tingkat Kelas</label>
           <div class="custom-dropdown" id="dropdown-reg-kelas" data-value="Kelas 10">
-            <button type="button" class="dropdown-trigger">
-              <span class="dropdown-label">Kelas 10</span>
-              <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
+            <button type="button" class="dropdown-trigger"><span class="dropdown-label">Kelas 10</span>
+              <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
             <ul class="dropdown-menu">
               <li class="dropdown-item selected" data-value="Kelas 10">Kelas 10</li>
@@ -102,39 +80,34 @@
             </ul>
           </div>
         </div>
-
         <div class="form-group">
-          <label for="reg-email">Alamat Email</label>
+          <label>Alamat Email</label>
           <input type="email" id="reg-email" class="form-input" placeholder="nama@sekolah.id" required />
         </div>
         <div class="form-group">
-          <label for="reg-password">Kata Sandi</label>
-          <input type="password" id="reg-password" class="form-input" placeholder="Minimal 6 karakter" minlength="6" required />
+          <label>Kata Sandi</label>
+          <input type="password" id="reg-password" class="form-input" placeholder="Minimal 6 karakter" required />
         </div>
         <button type="submit" class="btn btn-primary btn-block">Buat Akun Baru</button>
       </form>
-
       <div class="divider"><span>ATAU</span></div>
-
       <button type="button" id="google-login-btn" class="btn btn-outline btn-block">
-        <svg width="18" height="18" viewBox="0 0 24 24">
-          <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
-          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24z"/>
-          <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14z"/>
-          <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96z"/>
-        </svg>
+        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96z"/></svg>
         <span>Lanjutkan dengan Google</span>
       </button>
     </div>
   </main>
 
-  <!-- HALAMAN UTAMA APLIKASI -->
+  <!-- HALAMAN UTAMA -->
   <div id="app-view" class="app-layout hidden">
-    <!-- TOP HEADER -->
+    <!-- HEADER -->
     <header class="topbar">
       <div class="topbar-left">
-        <span class="app-title">Bank Bendahara</span>
-        <span id="header-kelas-badge" class="badge-kelas">Kelas 10</span>
+        <img src="logo.png" alt="Bank Bendahara" class="header-logo" />
+        <div class="class-badge-container">
+          <img id="header-class-logo" src="" class="class-logo hidden" alt="Logo Kelas" />
+          <span id="header-kelas-badge" class="badge-kelas">Kelas 10</span>
+        </div>
       </div>
       <div class="topbar-right">
         <div class="user-pill" id="header-user-pill">
@@ -145,43 +118,16 @@
       </div>
     </header>
 
-    <!-- NAVIGATION TABS -->
+    <!-- NAV TABS SCROLLABLE -->
     <nav class="nav-tabs">
-      <button type="button" class="nav-tab active" data-target="tab-kas">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
-        </svg>
-        <span>Uang Kas</span>
-      </button>
-      <button type="button" class="nav-tab admin-only hidden" data-target="tab-anggota">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-        </svg>
-        <span>Kelola Anggota</span>
-      </button>
-      <button type="button" class="nav-tab admin-only hidden" data-target="tab-saldo">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-        </svg>
-        <span>Atur Saldo & Iuran</span>
-      </button>
-      <button type="button" class="nav-tab" data-target="tab-chat">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        </svg>
-        <span>Chat</span>
-      </button>
-      <button type="button" class="nav-tab" data-target="tab-profile">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-        </svg>
-        <span>Profile</span>
-      </button>
+      <button type="button" class="nav-tab active" data-target="tab-kas">Uang Kas</button>
+      <button type="button" class="nav-tab admin-only hidden" data-target="tab-anggota">Kelola Anggota</button>
+      <button type="button" class="nav-tab admin-only hidden" data-target="tab-saldo">Atur Saldo & Iuran</button>
+      <button type="button" class="nav-tab" data-target="tab-chat">Chat</button>
+      <button type="button" class="nav-tab" data-target="tab-profile">Profile</button>
     </nav>
 
-    <!-- CONTENT CONTAINER -->
     <main class="main-content">
-
       <!-- 1. TAB UANG KAS -->
       <section id="tab-kas" class="tab-pane active">
         <div class="balance-card">
@@ -190,10 +136,9 @@
             <span class="realtime-pill">● REAL-TIME</span>
           </div>
           <div id="total-kas-amount" class="balance-amount">Rp 0</div>
-          <div class="balance-meta">
-            <span id="kas-schedule-info">Iuran: Rp 2.000 / Minggu</span>
-            <span>•</span>
-            <span id="kas-last-update">Belum ada mutasi</span>
+          <div class="balance-details">
+            <div id="kas-schedule-info" class="detail-row">Iuran: Rp 2.000 / Minggu</div>
+            <div id="kas-last-update" class="detail-row text-muted">Update: Belum ada mutasi</div>
           </div>
         </div>
 
@@ -201,39 +146,31 @@
           <div class="card-header-row">
             <div>
               <h2 class="card-title">Log Transaksi Uang Kas</h2>
-              <p class="card-subtitle">Riwayat masuk & keluar uang kas (Checklist & Manual)</p>
+              <p class="card-subtitle">Riwayat masuk & keluar uang kas</p>
             </div>
-            <!-- TOMBOL AKSI BULK DELETE ADMIN -->
             <div id="log-admin-actions" class="log-actions admin-only hidden">
               <button type="button" id="select-all-logs-btn" class="btn btn-secondary btn-sm">Pilih Semua</button>
-              <button type="button" id="delete-selected-logs-btn" class="btn btn-danger btn-sm" disabled>Hapus Terpilih (0)</button>
+              <button type="button" id="delete-selected-logs-btn" class="btn btn-danger btn-sm" disabled>Hapus (0)</button>
             </div>
           </div>
-
-          <div id="logs-list" class="logs-list">
-            <p class="empty-state">Belum ada riwayat transaksi Uang Kas.</p>
-          </div>
+          <div id="logs-list" class="logs-list"><p class="empty-state">Belum ada riwayat transaksi.</p></div>
         </div>
       </section>
 
-      <!-- 2. TAB KELOLA ANGGOTA (ADMIN) -->
+      <!-- 2. TAB KELOLA ANGGOTA -->
       <section id="tab-anggota" class="tab-pane hidden">
         <div class="card">
           <h2 class="card-title">Tambah Anggota Kelas</h2>
-          <p class="card-subtitle">Tambahkan siswa ke daftar wajib iuran uang kas</p>
           <form id="add-member-form" class="form-row-responsive">
             <div class="form-group flex-1">
-              <label for="member-name-input">Nama Lengkap Anggota</label>
-              <input type="text" id="member-name-input" class="form-input" placeholder="Contoh: Budi Santoso" required />
+              <label>Nama Lengkap Anggota</label>
+              <input type="text" id="member-name-input" class="form-input" required />
             </div>
             <div class="form-group width-kelas">
               <label>Tingkat Kelas</label>
               <div class="custom-dropdown" id="dropdown-member-kelas" data-value="Kelas 10">
-                <button type="button" class="dropdown-trigger">
-                  <span class="dropdown-label">Kelas 10</span>
-                  <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
+                <button type="button" class="dropdown-trigger"><span class="dropdown-label">Kelas 10</span>
+                  <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </button>
                 <ul class="dropdown-menu">
                   <li class="dropdown-item selected" data-value="Kelas 10">Kelas 10</li>
@@ -251,99 +188,77 @@
         <div class="card">
           <div class="card-header-row">
             <div>
-              <h2 class="card-title">Checklist Pembayaran Iuran</h2>
-              <p id="checklist-subtitle" class="card-subtitle">Mode: Per Minggu (1x dalam 6 hari sekolah)</p>
+              <h2 class="card-title">Checklist Pembayaran</h2>
+              <p id="checklist-subtitle" class="card-subtitle">Mode: Per Minggu</p>
             </div>
             <div class="period-selector-group">
-              <button type="button" id="prev-period-btn" class="btn btn-secondary btn-sm">&larr; Sebelumnya</button>
+              <button type="button" id="prev-period-btn" class="btn btn-secondary btn-sm">&larr; Seb.</button>
               <span id="current-period-label" class="period-badge">Minggu Ini</span>
-              <button type="button" id="next-period-btn" class="btn btn-secondary btn-sm">Berikutnya &rarr;</button>
+              <button type="button" id="next-period-btn" class="btn btn-secondary btn-sm">Berik. &rarr;</button>
             </div>
           </div>
-
-          <div id="members-checklist-container" class="members-list">
-            <p class="empty-state">Belum ada anggota terdaftar.</p>
-          </div>
+          <div id="members-checklist-container" class="members-list"></div>
         </div>
       </section>
 
-      <!-- 3. TAB ATUR SALDO & PENGATURAN IURAN (ADMIN) -->
+      <!-- 3. TAB ATUR SALDO -->
       <section id="tab-saldo" class="tab-pane hidden">
-        <!-- PENGATURAN IURAN & JADWAL -->
         <div class="card">
-          <h2 class="card-title">Pengaturan Iuran & Jadwal Pembayaran</h2>
-          <p class="card-subtitle">Atur nominal iuran kas dan jadwal tagihan anggota (Senin–Sabtu)</p>
-
+          <h2 class="card-title">Pengaturan Iuran & Jadwal</h2>
           <form id="fee-settings-form" class="form-stack">
             <div class="form-group">
-              <label for="fee-amount-input">Nominal Iuran Uang Kas (Rp)</label>
-              <input type="number" id="fee-amount-input" class="form-input" min="500" step="500" placeholder="Contoh: 2000" required />
+              <label>Tanggal Mulai Iuran</label>
+              <input type="date" id="start-date-input" class="form-input" required />
+              <p class="file-hint">Siklus iuran dihitung mulai dari tanggal ini.</p>
             </div>
-
             <div class="form-group">
-              <label>Mode / Jadwal Pembayaran</label>
+              <label>Nominal Iuran (Rp)</label>
+              <input type="number" id="fee-amount-input" class="form-input" required />
+            </div>
+            <div class="form-group">
+              <label>Mode Jadwal</label>
               <div class="custom-dropdown" id="dropdown-fee-schedule" data-value="weekly">
-                <button type="button" class="dropdown-trigger">
-                  <span class="dropdown-label">Per Minggu (1x dalam 6 hari sekolah)</span>
-                  <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
+                <button type="button" class="dropdown-trigger"><span class="dropdown-label">Per Minggu</span>
+                  <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </button>
                 <ul class="dropdown-menu">
                   <li class="dropdown-item selected" data-value="weekly">Per Minggu (1x dalam 6 hari sekolah)</li>
-                  <li class="dropdown-item" data-value="daily">Per Hari (kecuali Minggu / Senin–Sabtu)</li>
+                  <li class="dropdown-item" data-value="daily">Per Hari (Senin–Sabtu)</li>
                 </ul>
               </div>
             </div>
-
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary">Simpan Pengaturan Iuran</button>
-            </div>
+            <button type="submit" class="btn btn-primary">Simpan Pengaturan</button>
           </form>
-
           <div class="fee-history-box">
-            <h3 class="sub-heading">Histori Perubahan Nominal Iuran</h3>
-            <div id="fee-history-list" class="fee-history-list">
-              <p class="empty-state-sm">Belum ada riwayat perubahan nominal.</p>
-            </div>
+            <h3 class="sub-heading">Histori Perubahan</h3>
+            <div id="fee-history-list" class="fee-history-list"></div>
           </div>
         </div>
 
-        <!-- PENYESUAIAN SALDO MANUAL -->
         <div class="card">
-          <h2 class="card-title">Atur Uang Kas Manual</h2>
-          <p class="card-subtitle">Penyesuaian di luar iuran rutin (pengeluaran kelas, dana masuk tambahan, atau koreksi)</p>
-
+          <h2 class="card-title">Atur Saldo Manual</h2>
           <form id="manual-balance-form" class="form-stack">
             <div class="form-group">
               <label>Jenis Penyesuaian</label>
               <div class="custom-dropdown" id="dropdown-adjust-type" data-value="add">
-                <button type="button" class="dropdown-trigger">
-                  <span class="dropdown-label">Tambah Uang Kas (+)</span>
-                  <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
+                <button type="button" class="dropdown-trigger"><span class="dropdown-label">Tambah Uang Kas (+)</span>
+                  <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </button>
                 <ul class="dropdown-menu">
                   <li class="dropdown-item selected" data-value="add">Tambah Uang Kas (+)</li>
-                  <li class="dropdown-item" data-value="subtract">Kurangi Uang Kas / Pengeluaran (-)</li>
+                  <li class="dropdown-item" data-value="subtract">Kurangi Uang Kas (-)</li>
                 </ul>
               </div>
             </div>
-
             <div class="form-group">
-              <label for="adjust-amount-input">Nominal (Rp)</label>
-              <input type="number" id="adjust-amount-input" class="form-input" min="100" placeholder="Contoh: 15000" required />
+              <label>Nominal (Rp)</label>
+              <input type="number" id="adjust-amount-input" class="form-input" required />
             </div>
-
             <div class="form-group">
-              <label for="adjust-note-input">Keterangan Transaksi</label>
-              <textarea id="adjust-note-input" class="form-textarea" rows="3" placeholder="Contoh: Pembelian spidol papan tulis dan penghapus" required></textarea>
+              <label>Keterangan</label>
+              <textarea id="adjust-note-input" class="form-textarea" rows="2" required></textarea>
             </div>
-
-            <div class="form-actions">
-              <button type="submit" class="btn btn-primary">Simpan Perubahan Uang Kas</button>
-            </div>
+            <button type="submit" class="btn btn-primary">Simpan Saldo Manual</button>
           </form>
         </div>
       </section>
@@ -351,15 +266,9 @@
       <!-- 4. TAB CHAT -->
       <section id="tab-chat" class="tab-pane hidden">
         <div class="card chat-card">
-          <div class="chat-header">
-            <h2 class="card-title">Diskusi Kelas & Transparansi Kas</h2>
-            <p class="card-subtitle">Pesan dan foto profil tersinkronisasi secara real-time</p>
-          </div>
-          <div id="chat-messages" class="chat-messages">
-            <p class="empty-state">Belum ada pesan diskusi.</p>
-          </div>
+          <div id="chat-messages" class="chat-messages"></div>
           <form id="chat-form" class="chat-input-bar">
-            <input type="text" id="chat-input" class="form-input" placeholder="Tulis pesan untuk kelas..." maxlength="400" required />
+            <input type="text" id="chat-input" class="form-input" placeholder="Tulis pesan..." required />
             <button type="submit" class="btn btn-primary">Kirim</button>
           </form>
         </div>
@@ -369,8 +278,6 @@
       <section id="tab-profile" class="tab-pane hidden">
         <div class="card">
           <h2 class="card-title">Profil Saya</h2>
-          <p class="card-subtitle">Kelola identitas, foto profil, dan tingkat kelas Anda</p>
-
           <div class="profile-summary-box">
             <div class="profile-avatar-wrapper">
               <div id="profile-avatar-preview" class="avatar avatar-lg">B</div>
@@ -378,7 +285,7 @@
                 <input type="file" id="profile-photo-input" accept="image/jpeg,image/png,image/webp" class="hidden" />
                 <button type="button" id="choose-photo-btn" class="btn btn-secondary btn-sm">Pilih Foto Profil</button>
                 <button type="button" id="upload-photo-btn" class="btn btn-primary btn-sm hidden">Upload Foto</button>
-                <span id="selected-file-name" class="file-hint">Format JPG/PNG, maks. 2 MB</span>
+                <span id="selected-file-name" class="file-hint">Format JPG/PNG, maks 2MB</span>
               </div>
             </div>
             <div class="profile-meta-info">
@@ -386,25 +293,20 @@
                 <strong id="profile-display-name">bendahara</strong>
                 <span id="profile-badge-icon"></span>
               </div>
-              <div id="profile-email-text" class="profile-email">bendahara@gmail.com</div>
+              <div id="profile-email-text" class="profile-email">email@sekolah.id</div>
               <span id="profile-role-tag" class="role-chip">ROLE: USER</span>
             </div>
           </div>
-
           <form id="profile-form" class="form-stack">
             <div class="form-group">
-              <label for="profile-name-input">Nama Tampilan</label>
+              <label>Nama Tampilan</label>
               <input type="text" id="profile-name-input" class="form-input" required />
             </div>
-
             <div class="form-group">
-              <label>Pilih Tingkat Kelas</label>
+              <label>Pilih Kelas</label>
               <div class="custom-dropdown" id="dropdown-profile-kelas" data-value="Kelas 10">
-                <button type="button" class="dropdown-trigger">
-                  <span class="dropdown-label">Kelas 10</span>
-                  <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
+                <button type="button" class="dropdown-trigger"><span class="dropdown-label">Kelas 10</span>
+                  <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </button>
                 <ul class="dropdown-menu">
                   <li class="dropdown-item selected" data-value="Kelas 10">Kelas 10</li>
@@ -413,24 +315,37 @@
                 </ul>
               </div>
             </div>
-
             <div class="form-actions-split">
-              <button type="submit" class="btn btn-primary">Simpan Perubahan Profil</button>
-              <button type="button" id="logout-btn" class="btn btn-danger">Keluar Akun</button>
+              <button type="submit" class="btn btn-primary">Simpan Profil</button>
+              <button type="button" id="logout-btn" class="btn btn-danger">Keluar</button>
             </div>
           </form>
         </div>
 
+        <!-- PENGATURAN LOGO KELAS ADMIN -->
+        <div id="admin-class-settings-card" class="card admin-only hidden">
+          <h2 class="card-title">Logo Identitas Kelas</h2>
+          <div class="profile-summary-box">
+            <div class="profile-avatar-wrapper">
+              <img id="class-logo-preview-img" src="" class="avatar avatar-md hidden" style="border-radius:6px;" />
+              <div id="class-logo-placeholder" class="avatar avatar-md" style="border-radius:6px;">K</div>
+              <div class="profile-photo-controls">
+                <input type="file" id="class-logo-input" accept="image/jpeg,image/png,image/webp" class="hidden" />
+                <button type="button" id="choose-class-logo-btn" class="btn btn-secondary btn-sm">Ganti Logo Kelas</button>
+                <button type="button" id="upload-class-logo-btn" class="btn btn-primary btn-sm hidden">Upload Logo Kelas</button>
+                <span id="class-logo-hint" class="file-hint">Tampil di header</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="card">
-          <h2 class="card-title">Daftar Pengguna Terdaftar</h2>
-          <p class="card-subtitle">Klik tombol detail untuk melihat informasi lengkap pengguna</p>
+          <h2 class="card-title">Daftar Pengguna</h2>
           <div id="registered-users-list" class="users-directory-list"></div>
         </div>
       </section>
-
     </main>
   </div>
-
   <script type="module" src="app.js"></script>
 </body>
 </html>
