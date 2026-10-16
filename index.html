@@ -2,29 +2,59 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Bank Bendahara — Pengelola Uang Kas Kelas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bank Bendahara — Sistem Informasi Pengelola Uang Kas Kelas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <!-- LOADING SCREEN SAAT CEK AUTH STATE -->
-  <div id="auth-loading" class="loading-screen">
+  <!-- LOADING OVERLAY -->
+  <div id="loading-overlay" class="loading-overlay">
     <div class="spinner"></div>
-    <p class="loading-text">Memuat sesi Bank Bendahara...</p>
+    <p>Memuat sesi Bank Bendahara...</p>
   </div>
 
-  <!-- HALAMAN AUTENTIKASI (LOGIN & REGISTER) -->
-  <main id="auth-view" class="auth-container hidden">
-    <div class="auth-box">
-      <div class="auth-header">
-        <div class="brand-mark">
-          <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none">
-            <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-            <line x1="2" y1="10" x2="22" y2="10"></line>
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- MODAL KONFIRMASI HAPUS -->
+  <div id="confirm-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="confirm-title">Konfirmasi Penghapusan</h3>
+      </div>
+      <p id="confirm-message" class="modal-body">Apakah Anda yakin ingin menghapus data ini secara permanen?</p>
+      <div class="modal-actions">
+        <button type="button" id="confirm-cancel-btn" class="btn btn-secondary">Batal</button>
+        <button type="button" id="confirm-ok-btn" class="btn btn-danger">Ya, Hapus Permanen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DETAIL PROFIL PENGGUNA -->
+  <div id="user-detail-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Detail Pengguna</h3>
+      </div>
+      <div id="user-detail-body" class="modal-body"></div>
+      <div class="modal-actions">
+        <button type="button" id="close-user-detail-btn" class="btn btn-secondary">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HALAMAN AUTH (LOGIN & REGISTER) -->
+  <main id="auth-view" class="auth-wrapper hidden">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <line x1="2" y1="10" x2="22" y2="10" />
           </svg>
         </div>
         <h1>Bank Bendahara</h1>
@@ -36,442 +66,370 @@
         <button type="button" id="tab-register" class="auth-tab">Daftar Akun</button>
       </div>
 
-      <div id="auth-alert" class="alert-box hidden"></div>
-
-      <!-- FORM LOGIN / REGISTER -->
-      <form id="auth-form" class="auth-form">
-        <div id="register-fields" class="hidden">
-          <div class="form-group">
-            <label for="auth-nama">Nama Lengkap</label>
-            <input type="text" id="auth-nama" placeholder="Masukkan nama lengkap" maxlength="40" />
-          </div>
-          <div class="form-group">
-            <label for="auth-kelas">Pilih Kelas</label>
-            <select id="auth-kelas">
-              <option value="Kelas 10-1">Kelas 10-1</option>
-              <option value="Kelas 10-2">Kelas 10-2</option>
-              <option value="Kelas 10-3">Kelas 10-3</option>
-              <option value="Kelas 10-4">Kelas 10-4</option>
-              <option value="Kelas 10-5">Kelas 10-5</option>
-            </select>
-          </div>
-        </div>
-
+      <!-- FORM LOGIN -->
+      <form id="login-form" class="form-stack">
         <div class="form-group">
-          <label for="auth-email">Alamat Email</label>
-          <input type="email" id="auth-email" placeholder="nama@sekolah.id" required />
+          <label for="login-email">Alamat Email</label>
+          <input type="email" id="login-email" class="form-input" placeholder="nama@sekolah.id" required />
         </div>
-
         <div class="form-group">
-          <label for="auth-password">Kata Sandi</label>
-          <input type="password" id="auth-password" placeholder="Minimal 6 karakter" minlength="6" required />
+          <label for="login-password">Kata Sandi</label>
+          <input type="password" id="login-password" class="form-input" placeholder="Minimal 6 karakter" required />
         </div>
-
-        <button type="submit" id="btn-submit-auth" class="btn btn-primary btn-full">Masuk ke Aplikasi</button>
+        <button type="submit" class="btn btn-primary btn-block">Masuk ke Aplikasi</button>
       </form>
 
-      <div class="divider">
-        <span>ATAU</span>
-      </div>
+      <!-- FORM REGISTER -->
+      <form id="register-form" class="form-stack hidden">
+        <div class="form-group">
+          <label for="reg-name">Nama Lengkap</label>
+          <input type="text" id="reg-name" class="form-input" placeholder="Masukkan nama lengkap" required />
+        </div>
 
-      <button type="button" id="btn-google-login" class="btn btn-outline btn-full">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
-          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#2563EB"/>
-          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#0F172A"/>
-          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.85z" fill="#64748B"/>
-          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.85c.87-2.6 3.3-4.53 6.16-4.53z" fill="#1E293B"/>
+        <div class="form-group">
+          <label>Pilih Tingkat Kelas</label>
+          <div class="custom-dropdown" id="dropdown-reg-kelas" data-value="Kelas 10">
+            <button type="button" class="dropdown-trigger">
+              <span class="dropdown-label">Kelas 10</span>
+              <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <ul class="dropdown-menu">
+              <li class="dropdown-item selected" data-value="Kelas 10">Kelas 10</li>
+              <li class="dropdown-item" data-value="Kelas 11">Kelas 11</li>
+              <li class="dropdown-item" data-value="Kelas 12">Kelas 12</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="reg-email">Alamat Email</label>
+          <input type="email" id="reg-email" class="form-input" placeholder="nama@sekolah.id" required />
+        </div>
+        <div class="form-group">
+          <label for="reg-password">Kata Sandi</label>
+          <input type="password" id="reg-password" class="form-input" placeholder="Minimal 6 karakter" minlength="6" required />
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Buat Akun Baru</button>
+      </form>
+
+      <div class="divider"><span>ATAU</span></div>
+
+      <button type="button" id="google-login-btn" class="btn btn-outline btn-block">
+        <svg width="18" height="18" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24z"/>
+          <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14z"/>
+          <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96z"/>
         </svg>
         <span>Lanjutkan dengan Google</span>
       </button>
     </div>
   </main>
 
-  <!-- APLIKASI UTAMA -->
+  <!-- HALAMAN UTAMA APLIKASI -->
   <div id="app-view" class="app-layout hidden">
-    
-    <!-- OVERLAY & SLIDE DRAWER (HAMBURGER PANEL) -->
-    <div id="drawer-overlay" class="drawer-overlay hidden"></div>
-    <aside id="side-drawer" class="side-drawer">
-      <div class="drawer-header">
-        <span class="drawer-title">Informasi Sistem</span>
-        <button type="button" id="btn-close-drawer" class="icon-btn" aria-label="Tutup panel">
-          <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
+    <!-- TOP HEADER -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="app-title">Bank Bendahara</span>
+        <span id="header-kelas-badge" class="badge-kelas">Kelas 10</span>
       </div>
-      <div class="drawer-body">
-        <div class="app-info-card">
-          <div class="app-info-icon">
-            <svg viewBox="0 0 24 24" width="28" height="28" stroke="currentColor" stroke-width="2" fill="none">
-              <path d="M3 21h18"></path>
-              <path d="M3 10h18"></path>
-              <path d="M5 6l7-3 7 3"></path>
-              <path d="M4 10v11"></path>
-              <path d="M20 10v11"></path>
-              <path d="M8 14v3"></path>
-              <path d="M12 14v3"></path>
-              <path d="M16 14v3"></path>
-            </svg>
-          </div>
-          <p class="app-version-text">Bank Bendahara v2.0.1 by Hamdi Dev</p>
-          <p class="app-desc-text">Aplikasi manajemen pencatatan Uang Kas kelas secara real-time dan transparan.</p>
-        </div>
-
-        <div class="drawer-meta">
-          <div class="meta-item">
-            <span class="meta-label">Status Koneksi</span>
-            <span class="meta-value status-online">Real-time Aktif</span>
-          </div>
-          <div class="meta-item">
-            <span class="meta-label">Iuran Wajib</span>
-            <span class="meta-value">Rp 2.000 / Minggu</span>
-          </div>
-          <div class="meta-item">
-            <span class="meta-label">Kuota Chat</span>
-            <span class="meta-value">10 Pesan / Hari</span>
-          </div>
+      <div class="topbar-right">
+        <div class="user-pill" id="header-user-pill">
+          <div id="header-avatar" class="avatar avatar-xs">B</div>
+          <span id="header-username">User</span>
+          <span id="header-role-icon"></span>
         </div>
       </div>
-      <div class="drawer-footer">
-        <button type="button" id="btn-logout" class="btn btn-danger-outline btn-full">
-          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-            <polyline points="16 17 21 12 16 7"></polyline>
-            <line x1="21" y1="12" x2="9" y2="12"></line>
-          </svg>
-          <span>Keluar Sesi</span>
-        </button>
-      </div>
-    </aside>
-
-    <!-- HOTBAR / TOP NAVIGATION -->
-    <header class="hotbar">
-      <div class="hotbar-left">
-        <button type="button" id="btn-open-drawer" class="icon-btn" aria-label="Buka menu informasi">
-          <!-- Ikon Garis 3 (Hamburger) -->
-          <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2" fill="none">
-            <line x1="3" y1="6" x2="21" y2="6"></line>
-            <line x1="3" y1="12" x2="21" y2="12"></line>
-            <line x1="3" y1="18" x2="21" y2="18"></line>
-          </svg>
-        </button>
-        <div class="hotbar-brand">
-          <span class="brand-name">Bank Bendahara</span>
-          <span id="header-kelas-pill" class="kelas-pill">Kelas 10-1</span>
-        </div>
-      </div>
-
-      <button type="button" id="hotbar-user-btn" class="hotbar-user">
-        <span id="header-user-name" class="user-name-short">Memuat...</span>
-        <span id="header-user-badge" class="badge-slot"></span>
-      </button>
     </header>
 
-    <!-- MENU NAVIGASI UTAMA -->
-    <nav class="main-nav">
-      <button type="button" class="nav-item active" data-target="section-kas">
-        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
-          <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-          <line x1="2" y1="10" x2="22" y2="10"></line>
+    <!-- NAVIGATION TABS -->
+    <nav class="nav-tabs">
+      <button type="button" class="nav-tab active" data-target="tab-kas">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
         </svg>
         <span>Uang Kas</span>
       </button>
-
-      <!-- Menu Khusus Admin: Checklist Anggota & Atur Saldo -->
-      <button type="button" id="nav-admin-anggota" class="nav-item hidden" data-target="section-anggota">
-        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
-          <path d="M9 11l3 3L22 4"></path>
-          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+      <button type="button" class="nav-tab admin-only hidden" data-target="tab-anggota">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
         </svg>
         <span>Kelola Anggota</span>
       </button>
-
-      <button type="button" id="nav-admin-saldo" class="nav-item hidden" data-target="section-saldo">
-        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
-          <line x1="12" y1="1" x2="12" y2="23"></line>
-          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+      <button type="button" class="nav-tab admin-only hidden" data-target="tab-saldo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
         </svg>
-        <span>Atur Saldo</span>
+        <span>Atur Saldo & Iuran</span>
       </button>
-
-      <button type="button" class="nav-item" data-target="section-chat">
-        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+      <button type="button" class="nav-tab" data-target="tab-chat">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
         <span>Chat</span>
       </button>
-
-      <button type="button" class="nav-item" data-target="section-profile">
-        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-          <circle cx="12" cy="7" r="4"></circle>
+      <button type="button" class="nav-tab" data-target="tab-profile">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
         </svg>
         <span>Profile</span>
       </button>
     </nav>
 
-    <!-- KONTEN UTAMA -->
-    <div class="content-wrapper">
+    <!-- CONTENT CONTAINER -->
+    <main class="main-content">
 
-      <!-- SECTION 1: UANG KAS & RIWAYAT (SEMUA ROLE) -->
-      <section id="section-kas" class="view-section active">
-        <div class="kas-hero-card">
-          <div class="kas-hero-top">
-            <span class="kas-label">TOTAL UANG KAS KELAS</span>
-            <span class="live-indicator">
-              <span class="live-dot"></span>
-              REAL-TIME
-            </span>
+      <!-- 1. TAB UANG KAS -->
+      <section id="tab-kas" class="tab-pane active">
+        <div class="balance-card">
+          <div class="balance-top">
+            <span class="balance-label">TOTAL UANG KAS KELAS</span>
+            <span class="realtime-pill">● REAL-TIME</span>
           </div>
-          <div id="display-uang-kas" class="kas-amount">Rp 0</div>
-          <div class="kas-meta">
-            <span>Pembaruan terakhir: <strong id="kas-updated-at">-</strong></span>
+          <div id="total-kas-amount" class="balance-amount">Rp 0</div>
+          <div class="balance-meta">
+            <span id="kas-schedule-info">Iuran: Rp 2.000 / Minggu</span>
+            <span>•</span>
+            <span id="kas-last-update">Belum ada mutasi</span>
           </div>
         </div>
 
-        <!-- Ringkasan Mingguan (Read-only untuk semua) -->
-        <div class="panel-card">
-          <div class="panel-header">
-            <h2>Log Transaksi Uang Kas</h2>
-            <span class="panel-subtitle">20 mutasi terakhir (Checklist & Manual)</span>
+        <div class="card">
+          <div class="card-header-row">
+            <div>
+              <h2 class="card-title">Log Transaksi Uang Kas</h2>
+              <p class="card-subtitle">Riwayat masuk & keluar uang kas (Checklist & Manual)</p>
+            </div>
+            <!-- TOMBOL AKSI BULK DELETE ADMIN -->
+            <div id="log-admin-actions" class="log-actions admin-only hidden">
+              <button type="button" id="select-all-logs-btn" class="btn btn-secondary btn-sm">Pilih Semua</button>
+              <button type="button" id="delete-selected-logs-btn" class="btn btn-danger btn-sm" disabled>Hapus Terpilih (0)</button>
+            </div>
           </div>
-          <div id="transaksi-list" class="transaksi-list">
-            <p class="empty-state">Belum ada riwayat transaksi.</p>
+
+          <div id="logs-list" class="logs-list">
+            <p class="empty-state">Belum ada riwayat transaksi Uang Kas.</p>
           </div>
         </div>
       </section>
 
-      <!-- SECTION 2: KELOLA ANGGOTA & CHECKLIST MINGGUAN (KHUSUS ADMIN) -->
-      <section id="section-anggota" class="view-section hidden">
-        <div class="panel-card">
-          <div class="panel-header-flex">
-            <div>
-              <h2>Checklist Uang Kas Mingguan</h2>
-              <p class="panel-subtitle">Nominal tetap Rp 2.000 / minggu per anggota</p>
+      <!-- 2. TAB KELOLA ANGGOTA (ADMIN) -->
+      <section id="tab-anggota" class="tab-pane hidden">
+        <div class="card">
+          <h2 class="card-title">Tambah Anggota Kelas</h2>
+          <p class="card-subtitle">Tambahkan siswa ke daftar wajib iuran uang kas</p>
+          <form id="add-member-form" class="form-row-responsive">
+            <div class="form-group flex-1">
+              <label for="member-name-input">Nama Lengkap Anggota</label>
+              <input type="text" id="member-name-input" class="form-input" placeholder="Contoh: Budi Santoso" required />
             </div>
-            <div class="week-selector-box">
-              <label for="select-minggu">Minggu:</label>
-              <input type="week" id="select-minggu" />
+            <div class="form-group width-kelas">
+              <label>Tingkat Kelas</label>
+              <div class="custom-dropdown" id="dropdown-member-kelas" data-value="Kelas 10">
+                <button type="button" class="dropdown-trigger">
+                  <span class="dropdown-label">Kelas 10</span>
+                  <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+                <ul class="dropdown-menu">
+                  <li class="dropdown-item selected" data-value="Kelas 10">Kelas 10</li>
+                  <li class="dropdown-item" data-value="Kelas 11">Kelas 11</li>
+                  <li class="dropdown-item" data-value="Kelas 12">Kelas 12</li>
+                </ul>
+              </div>
             </div>
-          </div>
-
-          <!-- Form Tambah Anggota Baru -->
-          <form id="form-tambah-anggota" class="inline-add-form">
-            <input type="text" id="input-nama-anggota" placeholder="Ketik nama anggota baru..." maxlength="40" required />
-            <select id="input-kelas-anggota">
-              <option value="Kelas 10-1">Kelas 10-1</option>
-              <option value="Kelas 10-2">Kelas 10-2</option>
-              <option value="Kelas 10-3">Kelas 10-3</option>
-              <option value="Kelas 10-4">Kelas 10-4</option>
-              <option value="Kelas 10-5">Kelas 10-5</option>
-            </select>
-            <button type="submit" class="btn btn-primary">
-              <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-              <span>Tambah</span>
-            </button>
+            <div class="form-group form-btn-align">
+              <button type="submit" class="btn btn-primary">+ Tambah Anggota</button>
+            </div>
           </form>
+        </div>
 
-          <!-- Rekap Singkat Minggu Ini -->
-          <div class="rekap-bar">
-            <div class="rekap-item">
-              <span>Total Anggota:</span>
-              <strong id="rekap-total-anggota">0</strong>
+        <div class="card">
+          <div class="card-header-row">
+            <div>
+              <h2 class="card-title">Checklist Pembayaran Iuran</h2>
+              <p id="checklist-subtitle" class="card-subtitle">Mode: Per Minggu (1x dalam 6 hari sekolah)</p>
             </div>
-            <div class="rekap-item">
-              <span>Sudah Bayar:</span>
-              <strong id="rekap-sudah-bayar" class="text-blue">0</strong>
-            </div>
-            <div class="rekap-item">
-              <span>Terkumpul Minggu Ini:</span>
-              <strong id="rekap-terkumpul">Rp 0</strong>
+            <div class="period-selector-group">
+              <button type="button" id="prev-period-btn" class="btn btn-secondary btn-sm">&larr; Sebelumnya</button>
+              <span id="current-period-label" class="period-badge">Minggu Ini</span>
+              <button type="button" id="next-period-btn" class="btn btn-secondary btn-sm">Berikutnya &rarr;</button>
             </div>
           </div>
 
-          <!-- Daftar Checklist Anggota -->
-          <div id="anggota-checklist-container" class="anggota-list">
+          <div id="members-checklist-container" class="members-list">
             <p class="empty-state">Belum ada anggota terdaftar.</p>
           </div>
         </div>
       </section>
 
-      <!-- SECTION 3: ATUR SALDO / UANG KAS MANUAL (KHUSUS ADMIN) -->
-      <section id="section-saldo" class="view-section hidden">
-        <div class="panel-card">
-          <div class="panel-header">
-            <h2>Atur Uang Kas Manual</h2>
-            <p class="panel-subtitle">Penyesuaian di luar iuran mingguan (pengeluaran kelas, dana masuk tambahan, atau koreksi)</p>
+      <!-- 3. TAB ATUR SALDO & PENGATURAN IURAN (ADMIN) -->
+      <section id="tab-saldo" class="tab-pane hidden">
+        <!-- PENGATURAN IURAN & JADWAL -->
+        <div class="card">
+          <h2 class="card-title">Pengaturan Iuran & Jadwal Pembayaran</h2>
+          <p class="card-subtitle">Atur nominal iuran kas dan jadwal tagihan anggota (Senin–Sabtu)</p>
+
+          <form id="fee-settings-form" class="form-stack">
+            <div class="form-group">
+              <label for="fee-amount-input">Nominal Iuran Uang Kas (Rp)</label>
+              <input type="number" id="fee-amount-input" class="form-input" min="500" step="500" placeholder="Contoh: 2000" required />
+            </div>
+
+            <div class="form-group">
+              <label>Mode / Jadwal Pembayaran</label>
+              <div class="custom-dropdown" id="dropdown-fee-schedule" data-value="weekly">
+                <button type="button" class="dropdown-trigger">
+                  <span class="dropdown-label">Per Minggu (1x dalam 6 hari sekolah)</span>
+                  <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+                <ul class="dropdown-menu">
+                  <li class="dropdown-item selected" data-value="weekly">Per Minggu (1x dalam 6 hari sekolah)</li>
+                  <li class="dropdown-item" data-value="daily">Per Hari (kecuali Minggu / Senin–Sabtu)</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Simpan Pengaturan Iuran</button>
+            </div>
+          </form>
+
+          <div class="fee-history-box">
+            <h3 class="sub-heading">Histori Perubahan Nominal Iuran</h3>
+            <div id="fee-history-list" class="fee-history-list">
+              <p class="empty-state-sm">Belum ada riwayat perubahan nominal.</p>
+            </div>
           </div>
+        </div>
 
-          <form id="form-atur-saldo" class="saldo-form">
+        <!-- PENYESUAIAN SALDO MANUAL -->
+        <div class="card">
+          <h2 class="card-title">Atur Uang Kas Manual</h2>
+          <p class="card-subtitle">Penyesuaian di luar iuran rutin (pengeluaran kelas, dana masuk tambahan, atau koreksi)</p>
+
+          <form id="manual-balance-form" class="form-stack">
             <div class="form-group">
-              <label for="saldo-aksi">Jenis Penyesuaian</label>
-              <select id="saldo-aksi" required>
-                <option value="tambah">Tambah Uang Kas (+)</option>
-                <option value="kurang">Kurangi Uang Kas / Pengeluaran (-)</option>
-              </select>
+              <label>Jenis Penyesuaian</label>
+              <div class="custom-dropdown" id="dropdown-adjust-type" data-value="add">
+                <button type="button" class="dropdown-trigger">
+                  <span class="dropdown-label">Tambah Uang Kas (+)</span>
+                  <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+                <ul class="dropdown-menu">
+                  <li class="dropdown-item selected" data-value="add">Tambah Uang Kas (+)</li>
+                  <li class="dropdown-item" data-value="subtract">Kurangi Uang Kas / Pengeluaran (-)</li>
+                </ul>
+              </div>
             </div>
 
             <div class="form-group">
-              <label for="saldo-nominal">Nominal (Rp)</label>
-              <input type="number" id="saldo-nominal" placeholder="Contoh: 15000" min="100" step="100" required />
+              <label for="adjust-amount-input">Nominal (Rp)</label>
+              <input type="number" id="adjust-amount-input" class="form-input" min="100" placeholder="Contoh: 15000" required />
             </div>
 
             <div class="form-group">
-              <label for="saldo-catatan">Keterangan Mutasi</label>
-              <input type="text" id="saldo-catatan" placeholder="Contoh: Beli spidol & penghapus papan tulis" maxlength="80" required />
+              <label for="adjust-note-input">Keterangan Transaksi</label>
+              <textarea id="adjust-note-input" class="form-textarea" rows="3" placeholder="Contoh: Pembelian spidol papan tulis dan penghapus" required></textarea>
             </div>
 
-            <button type="submit" id="btn-submit-saldo" class="btn btn-primary">Simpan Perubahan Uang Kas</button>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Simpan Perubahan Uang Kas</button>
+            </div>
           </form>
         </div>
       </section>
 
-      <!-- SECTION 4: CHAT ANTAR USER -->
-      <section id="section-chat" class="view-section hidden">
-        <div class="chat-card">
+      <!-- 4. TAB CHAT -->
+      <section id="tab-chat" class="tab-pane hidden">
+        <div class="card chat-card">
           <div class="chat-header">
-            <div>
-              <h2>Ruang Diskusi Kelas</h2>
-              <p class="panel-subtitle">Klik nama pengirim untuk melihat profil</p>
-            </div>
-            <div class="chat-quota-badge">
-              <span>Sisa Kuota Hari Ini:</span>
-              <strong id="chat-limit-display">10 / 10</strong>
-            </div>
+            <h2 class="card-title">Diskusi Kelas & Transparansi Kas</h2>
+            <p class="card-subtitle">Pesan dan foto profil tersinkronisasi secara real-time</p>
           </div>
-
           <div id="chat-messages" class="chat-messages">
-            <p class="empty-state">Belum ada percakapan.</p>
+            <p class="empty-state">Belum ada pesan diskusi.</p>
           </div>
-
-          <form id="form-chat" class="chat-input-bar">
-            <div class="chat-input-wrapper">
-              <input 
-                type="text" 
-                id="input-chat" 
-                placeholder="Tulis pesan (maks. 100 karakter)..." 
-                maxlength="100" 
-                autocomplete="off"
-                required 
-              />
-              <span id="chat-char-count" class="char-counter">0/100</span>
-            </div>
-            <button type="submit" id="btn-send-chat" class="btn btn-primary">
-              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-              </svg>
-              <span>Kirim</span>
-            </button>
+          <form id="chat-form" class="chat-input-bar">
+            <input type="text" id="chat-input" class="form-input" placeholder="Tulis pesan untuk kelas..." maxlength="400" required />
+            <button type="submit" class="btn btn-primary">Kirim</button>
           </form>
         </div>
       </section>
 
-      <!-- SECTION 5: PROFILE SENDIRI & DIREKTORI USER LAIN -->
-      <section id="section-profile" class="view-section hidden">
-        <div class="profile-grid">
-          <!-- Kartu Profil Saya -->
-          <div class="panel-card">
-            <div class="panel-header">
-              <h2>Profil Saya</h2>
-              <p class="panel-subtitle">Kelola identitas dan kelas Anda</p>
-            </div>
+      <!-- 5. TAB PROFILE -->
+      <section id="tab-profile" class="tab-pane hidden">
+        <div class="card">
+          <h2 class="card-title">Profil Saya</h2>
+          <p class="card-subtitle">Kelola identitas, foto profil, dan tingkat kelas Anda</p>
 
-            <div class="my-profile-summary">
-              <div class="avatar-circle" id="my-profile-avatar">U</div>
-              <div class="my-profile-info">
-                <div class="name-with-badge">
-                  <h3 id="my-profile-name">-</h3>
-                  <span id="my-profile-badge"></span>
-                </div>
-                <p id="my-profile-email" class="text-muted">-</p>
-                <span id="my-profile-role-label" class="role-tag">ROLE: USER</span>
+          <div class="profile-summary-box">
+            <div class="profile-avatar-wrapper">
+              <div id="profile-avatar-preview" class="avatar avatar-lg">B</div>
+              <div class="profile-photo-controls">
+                <input type="file" id="profile-photo-input" accept="image/jpeg,image/png,image/webp" class="hidden" />
+                <button type="button" id="choose-photo-btn" class="btn btn-secondary btn-sm">Pilih Foto Profil</button>
+                <button type="button" id="upload-photo-btn" class="btn btn-primary btn-sm hidden">Upload Foto</button>
+                <span id="selected-file-name" class="file-hint">Format JPG/PNG, maks. 2 MB</span>
               </div>
             </div>
-
-            <form id="form-update-profile" class="profile-form">
-              <div class="form-group">
-                <label for="profile-input-nama">Nama Tampilan</label>
-                <input type="text" id="profile-input-nama" maxlength="40" required />
+            <div class="profile-meta-info">
+              <div class="profile-name-line">
+                <strong id="profile-display-name">bendahara</strong>
+                <span id="profile-badge-icon"></span>
               </div>
-
-              <div class="form-group">
-                <label for="profile-select-kelas">Pilih Kelas</label>
-                <select id="profile-select-kelas">
-                  <option value="Kelas 10-1">Kelas 10-1</option>
-                  <option value="Kelas 10-2">Kelas 10-2</option>
-                  <option value="Kelas 10-3">Kelas 10-3</option>
-                  <option value="Kelas 10-4">Kelas 10-4</option>
-                  <option value="Kelas 10-5">Kelas 10-5</option>
-                </select>
-              </div>
-
-              <button type="submit" id="btn-save-profile" class="btn btn-primary">Simpan Perubahan Profil</button>
-            </form>
+              <div id="profile-email-text" class="profile-email">bendahara@gmail.com</div>
+              <span id="profile-role-tag" class="role-chip">ROLE: USER</span>
+            </div>
           </div>
 
-          <!-- Direktori User Lain -->
-          <div class="panel-card">
-            <div class="panel-header">
-              <h2>Daftar Pengguna Terdaftar</h2>
-              <p class="panel-subtitle">Klik salah satu pengguna untuk melihat detail profil</p>
+          <form id="profile-form" class="form-stack">
+            <div class="form-group">
+              <label for="profile-name-input">Nama Tampilan</label>
+              <input type="text" id="profile-name-input" class="form-input" required />
             </div>
-            <div id="directory-user-list" class="directory-list">
-              <p class="empty-state">Memuat pengguna...</p>
+
+            <div class="form-group">
+              <label>Pilih Tingkat Kelas</label>
+              <div class="custom-dropdown" id="dropdown-profile-kelas" data-value="Kelas 10">
+                <button type="button" class="dropdown-trigger">
+                  <span class="dropdown-label">Kelas 10</span>
+                  <svg class="dropdown-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+                <ul class="dropdown-menu">
+                  <li class="dropdown-item selected" data-value="Kelas 10">Kelas 10</li>
+                  <li class="dropdown-item" data-value="Kelas 11">Kelas 11</li>
+                  <li class="dropdown-item" data-value="Kelas 12">Kelas 12</li>
+                </ul>
+              </div>
             </div>
-          </div>
+
+            <div class="form-actions-split">
+              <button type="submit" class="btn btn-primary">Simpan Perubahan Profil</button>
+              <button type="button" id="logout-btn" class="btn btn-danger">Keluar Akun</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">Daftar Pengguna Terdaftar</h2>
+          <p class="card-subtitle">Klik tombol detail untuk melihat informasi lengkap pengguna</p>
+          <div id="registered-users-list" class="users-directory-list"></div>
         </div>
       </section>
 
-    </div>
+    </main>
   </div>
-
-  <!-- MODAL LIHAT PROFIL USER LAIN (READ-ONLY) -->
-  <div id="user-modal-overlay" class="modal-overlay hidden">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3>Detail Profil Pengguna</h3>
-        <button type="button" id="btn-close-modal" class="icon-btn" aria-label="Tutup modal">
-          <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <div class="modal-profile-head">
-          <div id="modal-user-avatar" class="avatar-circle large">U</div>
-          <div class="name-with-badge center">
-            <h4 id="modal-user-name">-</h4>
-            <span id="modal-user-badge"></span>
-          </div>
-          <span id="modal-user-role" class="role-tag">USER</span>
-        </div>
-        <div class="modal-info-list">
-          <div class="modal-info-row">
-            <span class="info-label">Kelas</span>
-            <strong id="modal-user-kelas">-</strong>
-          </div>
-          <div class="modal-info-row">
-            <span class="info-label">Email</span>
-            <strong id="modal-user-email">-</strong>
-          </div>
-          <div class="modal-info-row">
-            <span class="info-label">Status Verifikasi</span>
-            <strong id="modal-user-badge-text">-</strong>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- TOAST NOTIFICATION -->
-  <div id="toast-box" class="toast hidden"></div>
 
   <script type="module" src="app.js"></script>
 </body>
